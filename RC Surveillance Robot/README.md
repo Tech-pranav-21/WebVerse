@@ -45,7 +45,7 @@ Copy the example settings and add your key. `.env` is git-ignored; never commit 
 cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
 ```
 
-Edit `.env`: set `GROQ_API_KEY` and the camera address (`VITE_CAMERA_BASE_URL`, for example `http://192.168.1.100`). Keep `AI_SERVER_PORT=8787`: port 3000 is the dashboard itself.
+Edit `.env`: set `GROQ_API_KEY` and the camera address (`VITE_CAMERA_BASE_URL`, for example `http://192.168.1.100`). Leave `AI_SERVER_PORT` at 8787 (any free port except 3000 works; 3000 is the dashboard itself).
 
 Start the three parts, each in its own terminal:
 
