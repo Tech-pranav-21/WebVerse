@@ -13,6 +13,19 @@ import { parsePoseDetectionResult } from './poseResponse';
 
 const POSE_SERVICE_BASE = '/api/pose';
 const DIRECT_SERVICE_BASE = 'http://127.0.0.1:8000';
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The service listens on this machine's loopback, so a page may fall back to it directly only when the
+ * page is served from this machine too. A page on any other host (a public deployment, another computer
+ * on the network) must not probe the visitor's localhost. Outside a browser (tests, tools) there is no
+ * page, and the long-standing default applies.
+ */
+export function defaultDirectBase(pageHostname: string | undefined): string | null {
+  if (pageHostname === undefined) return DIRECT_SERVICE_BASE;
+  return LOOPBACK_HOSTNAMES.has(pageHostname) ? DIRECT_SERVICE_BASE : null;
+}
+
 /** The first inference after the service starts can take a few seconds on the CPU. */
 const DEFAULT_DETECT_TIMEOUT_MS = 20_000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 4_000;
@@ -37,7 +50,8 @@ export interface PoseRequestOptions {
 export interface PoseClientOptions {
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
   proxyBase?: string;
-  directBase?: string;
+  /** Address tried when the proxy is unreachable. null = never fall back. Default: see defaultDirectBase(). */
+  directBase?: string | null;
   detectTimeoutMs?: number;
   healthTimeoutMs?: number;
 }
@@ -85,7 +99,7 @@ async function failureFor(res: Response): Promise<PoseClientError> {
 export function createPoseClient(options: PoseClientOptions = {}): PoseClient {
   const fetchImpl = options.fetchImpl ?? ((input: string, init?: RequestInit) => fetch(input, init));
   const proxyBase = options.proxyBase ?? POSE_SERVICE_BASE;
-  const directBase = options.directBase ?? DIRECT_SERVICE_BASE;
+  const directBase = options.directBase !== undefined ? options.directBase : defaultDirectBase(globalThis.location?.hostname);
   const detectTimeoutMs = options.detectTimeoutMs ?? DEFAULT_DETECT_TIMEOUT_MS;
   const healthTimeoutMs = options.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS;
 
@@ -113,6 +127,7 @@ export function createPoseClient(options: PoseClientOptions = {}): PoseClient {
         if (controller.signal.aborted) throw err;
         // proxy not reachable: try the direct port
       }
+      if (directBase === null) throw new TypeError('no direct fallback for this page');
       return await fetchImpl(`${directBase}${endpoint}`, withSignal);
     } catch (err) {
       if (timedOut) {

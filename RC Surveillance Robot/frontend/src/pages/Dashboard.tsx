@@ -19,6 +19,8 @@ import { SettingsPage } from '../components/SettingsPage';
 import { DiagnosticsPanel } from '../components/DiagnosticsPanel';
 import { SnapshotGallery } from '../components/SnapshotGallery';
 import { NetworkGuideView } from '../components/NetworkGuideView';
+import { DeploymentModeBanner } from '../components/DeploymentModeBanner';
+import { IS_PUBLIC_DEMO } from '../config/deploymentMode';
 import { cameraService } from '../services/cameraService';
 import { isMixedContentRestricted } from '../services/connectionService';
 import { describeStatus } from '../services/streamStatusText';
@@ -174,6 +176,8 @@ export const Dashboard: React.FC = () => {
         onOpenNetworkGuide={openNetworkGuide}
         onOpenNavigation={() => setIsMobileSidebarOpen(true)}
       />
+
+      {IS_PUBLIC_DEMO && <DeploymentModeBanner />}
 
       <div className="flex flex-1 min-h-0">
         {/* Sidebar Navigation */}

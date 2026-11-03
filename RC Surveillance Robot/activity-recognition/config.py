@@ -13,6 +13,17 @@ from typing import Dict, List, Tuple
 SERVICE_HOST: str = os.getenv("POSE_SERVICE_HOST", "127.0.0.1")
 SERVICE_PORT: int = int(os.getenv("POSE_SERVICE_PORT", "8000"))
 
+# Browser origins allowed to call the service (CORS), comma separated. Pages served from this machine
+# (http/https on localhost, 127.0.0.1 or [::1], any port) are always allowed; the dashboard normally
+# reaches the service through its own same-origin /api/pose proxy. "*" is ignored on purpose: the
+# service answers credentialed requests, which a wildcard origin must never be combined with.
+POSE_ALLOWED_ORIGINS: List[str] = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv("POSE_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip() and origin.strip() != "*"
+]
+LOOPBACK_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"
+
 # Model configuration
 # yolov8n-pose: ~6.5 MB, 3.2M params, 8.9 GFLOPs (COCO Keypoints 17)
 # License: AGPL-3.0 (Ultralytics)

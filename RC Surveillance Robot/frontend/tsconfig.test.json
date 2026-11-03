@@ -55,6 +55,8 @@
     "src/services/poseClient.ts",
     "src/services/poseSettings.ts",
     "src/services/activityPresentation.ts",
+    "src/services/deploymentMode.ts",
+    "src/components/DeploymentModeBanner.tsx",
     "src/components/ActivityRecognitionSection.tsx",
     "src/components/PoseKeypointInspector.tsx",
     "src/components/PoseEstimationPanel.tsx",

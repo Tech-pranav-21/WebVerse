@@ -2,6 +2,8 @@
 
 A dedicated, lightweight surveillance dashboard engineered in React, TypeScript, Vite, and Tailwind CSS for monitoring an RC Robot equipped with an ESP32-CAM (OV2640) video unit.
 
+> **Part of WebVerse.** This app lives in the WebVerse repository as the `RC Surveillance Robot` project. The two ways to run it (the hosted public demo, and Local Hardware Mode with a real ESP32-CAM), how to deploy the demo, and the complete environment-variable table are in the [project README](../README.md).
+
 > **Surveillance-Only Project Scope:** This application is strictly dedicated to camera feed monitoring, single-frame snapshots, connection diagnostics, and network configuration. In accordance with strict project constraints, vehicle motor controls, remote steering, Bluetooth commands, Arduino hardware controls, backend services, databases, authentication, and cloud video recording are deliberately excluded.
 
 ---

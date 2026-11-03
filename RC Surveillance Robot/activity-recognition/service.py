@@ -20,7 +20,9 @@ from config import (
     DEFAULT_IOU_THRESHOLD,
     HAR_ENABLED,
     KEYPOINT_CONF_THRESHOLD,
+    LOOPBACK_ORIGIN_REGEX,
     MAX_IMAGE_BYTES,
+    POSE_ALLOWED_ORIGINS,
     SERVICE_HOST,
     SERVICE_PORT,
 )
@@ -47,10 +49,12 @@ app = FastAPI(
     version="1.1.0",
 )
 
-# Enable CORS for local React/Vite development and dashboard access
+# CORS for the dashboard: pages served from this machine, plus any origin listed in POSE_ALLOWED_ORIGINS.
+# Never "*": the service must not be callable from an arbitrary website the user happens to visit.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=POSE_ALLOWED_ORIGINS,
+    allow_origin_regex=LOOPBACK_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

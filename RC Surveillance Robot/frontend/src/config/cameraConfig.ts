@@ -4,6 +4,7 @@
  */
 
 import { CameraConfig } from '../types/camera';
+import { IS_PUBLIC_DEMO } from './deploymentMode';
 
 export const CAMERA_STORAGE_KEY = 'rc_surveillance_camera_config_v1';
 export const LAST_CONNECTION_KEY = 'rc_surveillance_last_connection_time';
@@ -21,7 +22,9 @@ export const RECOVERY_SCHEMA_VERSION = 2;
  * by default until confirmed on the physical robot firmware.
  */
 export const DEFAULT_CAMERA_CONFIG: CameraConfig = {
-  baseUrl: (import.meta.env.VITE_CAMERA_BASE_URL as string) || 'http://192.168.1.100',
+  // The public demo has no robot: it ignores VITE_CAMERA_BASE_URL (Vite would bake a private camera address
+  // into a public bundle) and starts with no address, so nothing is probed until a visitor enters their own.
+  baseUrl: IS_PUBLIC_DEMO ? '' : (import.meta.env.VITE_CAMERA_BASE_URL as string) || 'http://192.168.1.100',
   streamPath: (import.meta.env.VITE_CAMERA_STREAM_PATH as string) || '',
   snapshotPath: (import.meta.env.VITE_CAMERA_SNAPSHOT_PATH as string) || '/capture',
   // Bounded automatic retries after a stream failure (see StreamConnection). Switchable in Settings.
