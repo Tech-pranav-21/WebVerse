@@ -1,0 +1,206 @@
+{
+  "ok": true,
+  "person_count": 1,
+  "persons": [
+    {
+      "person_id": 0,
+      "bbox": {
+        "x1": 484.2,
+        "y1": 40.2,
+        "x2": 725.7,
+        "y2": 399.2,
+        "width": 241.6,
+        "height": 359.0
+      },
+      "bbox_confidence": 0.917,
+      "keypoints": [
+        {
+          "id": 0,
+          "name": "nose",
+          "x": 604.6,
+          "y": 126.1,
+          "confidence": 0.979,
+          "visible": true
+        },
+        {
+          "id": 1,
+          "name": "left_eye",
+          "x": 620.5,
+          "y": 110.2,
+          "confidence": 0.955,
+          "visible": true
+        },
+        {
+          "id": 2,
+          "name": "right_eye",
+          "x": 588.8,
+          "y": 110.5,
+          "confidence": 0.96,
+          "visible": true
+        },
+        {
+          "id": 3,
+          "name": "left_ear",
+          "x": 643.3,
+          "y": 119.8,
+          "confidence": 0.788,
+          "visible": true
+        },
+        {
+          "id": 4,
+          "name": "right_ear",
+          "x": 569.2,
+          "y": 121.1,
+          "confidence": 0.784,
+          "visible": true
+        },
+        {
+          "id": 5,
+          "name": "left_shoulder",
+          "x": 678.7,
+          "y": 225.0,
+          "confidence": 0.971,
+          "visible": true
+        },
+        {
+          "id": 6,
+          "name": "right_shoulder",
+          "x": 533.0,
+          "y": 222.9,
+          "confidence": 0.976,
+          "visible": true
+        },
+        {
+          "id": 7,
+          "name": "left_elbow",
+          "x": 693.2,
+          "y": 349.5,
+          "confidence": 0.72,
+          "visible": true
+        },
+        {
+          "id": 8,
+          "name": "right_elbow",
+          "x": 512.6,
+          "y": 345.3,
+          "confidence": 0.757,
+          "visible": true
+        },
+        {
+          "id": 9,
+          "name": "left_wrist",
+          "x": 706.6,
+          "y": 400.0,
+          "confidence": 0.486,
+          "visible": true
+        },
+        {
+          "id": 10,
+          "name": "right_wrist",
+          "x": 499.0,
+          "y": 400.0,
+          "confidence": 0.518,
+          "visible": true
+        },
+        {
+          "id": 11,
+          "name": "left_hip",
+          "x": 644.8,
+          "y": 400.0,
+          "confidence": 0.375,
+          "visible": false
+        },
+        {
+          "id": 12,
+          "name": "right_hip",
+          "x": 558.7,
+          "y": 399.3,
+          "confidence": 0.396,
+          "visible": false
+        },
+        {
+          "id": 13,
+          "name": "left_knee",
+          "x": 640.9,
+          "y": 400.0,
+          "confidence": 0.05,
+          "visible": false
+        },
+        {
+          "id": 14,
+          "name": "right_knee",
+          "x": 562.5,
+          "y": 366.3,
+          "confidence": 0.051,
+          "visible": false
+        },
+        {
+          "id": 15,
+          "name": "left_ankle",
+          "x": 678.5,
+          "y": 400.0,
+          "confidence": 0.019,
+          "visible": false
+        },
+        {
+          "id": 16,
+          "name": "right_ankle",
+          "x": 657.7,
+          "y": 335.8,
+          "confidence": 0.02,
+          "visible": false
+        }
+      ],
+      "visible_keypoints": 11,
+      "total_keypoints": 17,
+      "track_id": 1,
+      "activity": {
+        "track_id": 1,
+        "label": "Upper Body Inactivity",
+        "confidence": 0.807,
+        "confirmed": true,
+        "candidate_label": "Upper Body Inactivity",
+        "previous_label": null,
+        "duration_s": 4.0,
+        "body_visibility": 0.4,
+        "visibility_mode": "upper_body",
+        "detection_quality": "medium",
+        "quality_score": 0.646,
+        "tracking_status": "tracking",
+        "observations": 5,
+        "inactive_s": null,
+        "note": "Legs are not visible: only upper-body activities are classified.",
+        "missing_regions": [
+          "hips",
+          "legs"
+        ],
+        "evidence": {
+          "posture": "upper_neutral",
+          "posture_scores": {
+            "upper_raising": 0.0,
+            "upper_bending": 0.0,
+            "upper_neutral": 1.0
+          },
+          "shoulder_tilt_deg": 0.8,
+          "hand_rise": 0.0,
+          "head_drop": -0.67,
+          "body_speed_widths_s": 0.0
+        }
+      }
+    }
+  ],
+  "image_width": 1200,
+  "image_height": 400,
+  "inference_time_ms": 38.0,
+  "total_time_ms": 40.6,
+  "device": "cpu",
+  "model": "yolov8n-pose.pt",
+  "activity_recognition": {
+    "enabled": true,
+    "tracking": true,
+    "session_id": "fx-upper",
+    "persons_analyzed": 1,
+    "persons_skipped": 0,
+    "lost_tracks": []
+  }
+}

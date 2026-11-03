@@ -1,0 +1,208 @@
+{
+  "ok": true,
+  "person_count": 1,
+  "persons": [
+    {
+      "person_id": 0,
+      "bbox": {
+        "x1": 467.8,
+        "y1": 43.4,
+        "x2": 737.6,
+        "y2": 864.6,
+        "width": 269.8,
+        "height": 821.2
+      },
+      "bbox_confidence": 0.928,
+      "keypoints": [
+        {
+          "id": 0,
+          "name": "nose",
+          "x": 604.3,
+          "y": 123.8,
+          "confidence": 0.993,
+          "visible": true
+        },
+        {
+          "id": 1,
+          "name": "left_eye",
+          "x": 620.4,
+          "y": 110.0,
+          "confidence": 0.966,
+          "visible": true
+        },
+        {
+          "id": 2,
+          "name": "right_eye",
+          "x": 588.8,
+          "y": 110.0,
+          "confidence": 0.979,
+          "visible": true
+        },
+        {
+          "id": 3,
+          "name": "left_ear",
+          "x": 643.9,
+          "y": 122.1,
+          "confidence": 0.772,
+          "visible": true
+        },
+        {
+          "id": 4,
+          "name": "right_ear",
+          "x": 566.6,
+          "y": 122.4,
+          "confidence": 0.861,
+          "visible": true
+        },
+        {
+          "id": 5,
+          "name": "left_shoulder",
+          "x": 670.7,
+          "y": 222.2,
+          "confidence": 0.997,
+          "visible": true
+        },
+        {
+          "id": 6,
+          "name": "right_shoulder",
+          "x": 539.9,
+          "y": 223.9,
+          "confidence": 0.999,
+          "visible": true
+        },
+        {
+          "id": 7,
+          "name": "left_elbow",
+          "x": 700.2,
+          "y": 348.7,
+          "confidence": 0.98,
+          "visible": true
+        },
+        {
+          "id": 8,
+          "name": "right_elbow",
+          "x": 507.5,
+          "y": 349.5,
+          "confidence": 0.994,
+          "visible": true
+        },
+        {
+          "id": 9,
+          "name": "left_wrist",
+          "x": 716.6,
+          "y": 457.2,
+          "confidence": 0.967,
+          "visible": true
+        },
+        {
+          "id": 10,
+          "name": "right_wrist",
+          "x": 487.1,
+          "y": 455.2,
+          "confidence": 0.986,
+          "visible": true
+        },
+        {
+          "id": 11,
+          "name": "left_hip",
+          "x": 649.0,
+          "y": 456.3,
+          "confidence": 0.999,
+          "visible": true
+        },
+        {
+          "id": 12,
+          "name": "right_hip",
+          "x": 563.6,
+          "y": 456.7,
+          "confidence": 1.0,
+          "visible": true
+        },
+        {
+          "id": 13,
+          "name": "left_knee",
+          "x": 654.4,
+          "y": 645.4,
+          "confidence": 0.997,
+          "visible": true
+        },
+        {
+          "id": 14,
+          "name": "right_knee",
+          "x": 554.5,
+          "y": 640.7,
+          "confidence": 0.998,
+          "visible": true
+        },
+        {
+          "id": 15,
+          "name": "left_ankle",
+          "x": 658.3,
+          "y": 801.2,
+          "confidence": 0.972,
+          "visible": true
+        },
+        {
+          "id": 16,
+          "name": "right_ankle",
+          "x": 553.4,
+          "y": 797.8,
+          "confidence": 0.98,
+          "visible": true
+        }
+      ],
+      "visible_keypoints": 17,
+      "total_keypoints": 17,
+      "track_id": 1,
+      "activity": {
+        "track_id": 1,
+        "label": "Standing",
+        "confidence": 0.193,
+        "confirmed": false,
+        "candidate_label": "Standing",
+        "previous_label": null,
+        "duration_s": 0.0,
+        "body_visibility": 1.0,
+        "visibility_mode": "full_body",
+        "detection_quality": "good",
+        "quality_score": 0.976,
+        "tracking_status": "initializing",
+        "observations": 1,
+        "inactive_s": null,
+        "note": "Movement is not assessed yet: standing and walking cannot be told apart from a single frame.",
+        "missing_regions": [],
+        "evidence": {
+          "posture": "upright",
+          "posture_scores": {
+            "upright": 1.0,
+            "sitting": 0.0,
+            "bending": 0.0,
+            "lying": 0.0
+          },
+          "torso_angle_deg": 0.2,
+          "leg_angle_deg": 1.6,
+          "knee_drop": 0.8,
+          "ankle_drop": 1.47,
+          "torso_ratio": 0.68,
+          "bbox_aspect": 0.33,
+          "gait_cue": "unavailable (frame rate too low to see steps)",
+          "motion": "not_yet_assessed"
+        }
+      }
+    }
+  ],
+  "image_width": 1200,
+  "image_height": 896,
+  "inference_time_ms": 75.4,
+  "total_time_ms": 107.2,
+  "device": "cpu",
+  "model": "yolov8n-pose.pt",
+  "activity_recognition": {
+    "enabled": true,
+    "tracking": true,
+    "session_id": "fx-single",
+    "persons_analyzed": 1,
+    "persons_skipped": 0,
+    "lost_tracks": []
+  }
+}

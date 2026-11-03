@@ -1,0 +1,6 @@
+{
+  "name": "RC Surveillance Robot Dashboard",
+  "description": "Professional surveillance dashboard for RC robot with ESP32-CAM video streaming, connection diagnostics, and configuration controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

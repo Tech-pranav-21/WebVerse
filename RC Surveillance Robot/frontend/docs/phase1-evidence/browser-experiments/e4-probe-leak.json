@@ -1,0 +1,60 @@
+{
+ "E7a_probe_on_healthy_stream": {
+  "probeResult": {
+   "success": true,
+   "frameVerified": true
+  },
+  "serverView": {
+   "+200ms": {
+    "open": 1,
+    "queued": 0,
+    "totalReq": 1
+   },
+   "+3000ms": {
+    "open": 1,
+    "queued": 0,
+    "totalReq": 1
+   },
+   "+8000ms": {
+    "open": 1,
+    "queued": 0,
+    "totalReq": 1
+   },
+   "after_gc": {
+    "open": 1,
+    "queued": 0,
+    "totalReq": 1
+   }
+  }
+ },
+ "E7b_probe_when_no_frames_arrive": {
+  "probeResult": {
+   "success": false,
+   "hostReachable": false,
+   "frameVerified": false,
+   "err": "Image probe timed out after 4s."
+  },
+  "serverView": {
+   "+200ms": {
+    "open": 0,
+    "queued": 0,
+    "totalReq": 2
+   },
+   "+3000ms": {
+    "open": 0,
+    "queued": 0,
+    "totalReq": 2
+   },
+   "+8000ms": {
+    "open": 0,
+    "queued": 0,
+    "totalReq": 2
+   },
+   "after_gc": {
+    "open": 0,
+    "queued": 0,
+    "totalReq": 2
+   }
+  }
+ }
+}

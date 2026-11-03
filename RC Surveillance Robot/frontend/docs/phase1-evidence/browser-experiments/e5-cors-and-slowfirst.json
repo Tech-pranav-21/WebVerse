@@ -1,0 +1,45 @@
+{
+ "E8a_cors_OFF": {
+  "imgCanvasReadback": "img error",
+  "imgCrossOriginAnon": "error event",
+  "fetchCors": "TypeError: Failed to fetch",
+  "fetchNoCors": {
+   "type": "opaque",
+   "status": 0,
+   "bodyIsNull": true
+  }
+ },
+ "E8b_cors_ON": {
+  "imgCrossOriginCanvasReadback": "img error",
+  "fetchCorsStatus": 200,
+  "contentType": "multipart/x-mixed-replace;boundary=123456789000000000000987654321",
+  "chunksBeforeStall": 16,
+  "gapDuringStall": {
+   "lastChunkAtMs": 1503,
+   "nowMs": 5778
+  },
+  "readerAfterRST": [
+   1503,
+   [
+    "err",
+    "TypeError",
+    5517
+   ]
+  ]
+ },
+ "E7c_slow_first_frame_probe_then_fetch": {
+  "probeResult": {
+   "success": false,
+   "hostReachable": true,
+   "frameVerified": false
+  },
+  "serverAfter6s": {
+   "open": 1,
+   "totalReq": 2
+  },
+  "serverAfterGc": {
+   "open": 1,
+   "totalReq": 2
+  }
+ }
+}

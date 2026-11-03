@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "person_count": 0,
+  "persons": [],
+  "image_width": 640,
+  "image_height": 480,
+  "inference_time_ms": 51.3,
+  "total_time_ms": 52.3,
+  "device": "cpu",
+  "model": "yolov8n-pose.pt",
+  "activity_recognition": {
+    "enabled": true,
+    "tracking": true,
+    "session_id": "fx-empty",
+    "persons_analyzed": 0,
+    "persons_skipped": 0,
+    "lost_tracks": []
+  }
+}

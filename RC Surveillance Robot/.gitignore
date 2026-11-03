@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets and local configuration (the .env.example files are tracked)
+.env
+.env.*
+!.env.example
