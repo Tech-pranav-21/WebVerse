@@ -1,0 +1,12 @@
+{
+ "cors_OFF": {
+  "plainImg": "loaded; canvas readback blocked (SecurityError)",
+  "imgCrossOriginAnonymous": "error event (image refused)"
+ },
+ "cors_ON": {
+  "plainImg": "loaded; canvas readback blocked (SecurityError)",
+  "imgCrossOriginAnonymous": "loaded; canvas readback allowed"
+ },
+ "srcEmptyStringFiresErrorEvent": true,
+ "srcEmptyStringFiresErrorEvent_afterValidLoad": true
+}

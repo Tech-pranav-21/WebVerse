@@ -1,0 +1,125 @@
+{
+ "E1_healthy_5s": {
+  "events": [
+   {
+    "t": 195,
+    "e": "load",
+    "complete": true,
+    "w": 160
+   }
+  ],
+  "state": {
+   "complete": true,
+   "w": 160
+  },
+  "displayChangesBetweenShots": true,
+  "stats": {
+   "openSockets": 1,
+   "activeStreams": 1,
+   "queuedRequests": 0,
+   "totalConnections": 1,
+   "totalRequests": 1
+  }
+ },
+ "E2_stall_40s_then_resume": {
+  "duringStall": {
+   "events": [
+    {
+     "t": 124,
+     "e": "load",
+     "complete": true,
+     "w": 160
+    }
+   ],
+   "state": {
+    "complete": true,
+    "w": 160
+   },
+   "displayFrozen": true,
+   "socketsOpen": 1
+  },
+  "afterResume": {
+   "displayUpdatedAgain": true,
+   "events": [
+    {
+     "t": 124,
+     "e": "load",
+     "complete": true,
+     "w": 160
+    }
+   ]
+  }
+ },
+ "E3a_drop_RST": {
+  "events": [
+   {
+    "t": 115,
+    "e": "load",
+    "complete": true,
+    "w": 160
+   }
+  ],
+  "state": {
+   "complete": true,
+   "w": 0
+  },
+  "browserReconnectedOnItsOwn": false,
+  "totalStreamRequests": 1
+ },
+ "E3b_graceful_end": {
+  "events": [
+   {
+    "t": 131,
+    "e": "load",
+    "complete": true,
+    "w": 160
+   }
+  ],
+  "state": {
+   "complete": true,
+   "w": 160
+  },
+  "browserReconnectedOnItsOwn": false
+ },
+ "E4a_reboot_refuse": {
+  "events": [
+   {
+    "t": 128,
+    "e": "load",
+    "complete": true,
+    "w": 160
+   },
+   {
+    "t": 2510,
+    "e": "new-img-created-while-down"
+   },
+   {
+    "t": 2515,
+    "e": "error",
+    "complete": true
+   }
+  ],
+  "state": {
+   "complete": true,
+   "w": 0
+  }
+ },
+ "E4b_reboot_blackhole_25s": {
+  "events": [
+   {
+    "t": 126,
+    "e": "load",
+    "complete": true,
+    "w": 160
+   },
+   {
+    "t": 2013,
+    "e": "new-src-set-while-blackholed"
+   }
+  ],
+  "state": {
+   "complete": false,
+   "w": 0
+  }
+ }
+}

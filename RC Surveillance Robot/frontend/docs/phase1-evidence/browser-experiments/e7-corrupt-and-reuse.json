@@ -1,0 +1,71 @@
+{
+ "E10_same_url_after_graceful_end": {
+  "newRequestsSeen": 0,
+  "imgNow": {
+   "complete": true,
+   "w": 160,
+   "events": [
+    "load",
+    "load"
+   ]
+  }
+ },
+ "E9_one_garbage_frame_midstream": {
+  "naturalWidthSamplesEvery100msAfterBadFrame": [
+   160,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "final": {
+   "complete": true,
+   "w": 0,
+   "events": [
+    "load"
+   ]
+  }
+ },
+ "E9_one_truncated_frame_midstream": {
+  "naturalWidthSamplesEvery100msAfterBadFrame": [
+   160,
+   160,
+   160,
+   160,
+   160,
+   160,
+   160,
+   160,
+   160,
+   160,
+   160,
+   160
+  ],
+  "final": {
+   "complete": true,
+   "w": 160,
+   "events": [
+    "load"
+   ]
+  }
+ },
+ "E10b_same_url_after_RST": {
+  "newRequestsSeen": 0,
+  "imgNow": {
+   "complete": true,
+   "w": 160,
+   "events": [
+    "load",
+    "load",
+    "load"
+   ]
+  }
+ }
+}
