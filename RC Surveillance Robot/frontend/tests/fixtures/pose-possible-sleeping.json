@@ -193,8 +193,8 @@
   ],
   "image_width": 896,
   "image_height": 1200,
-  "inference_time_ms": 62.4,
-  "total_time_ms": 68.9,
+  "inference_time_ms": 61.8,
+  "total_time_ms": 68.2,
   "device": "cpu",
   "model": "yolov8n-pose.pt",
   "activity_recognition": {

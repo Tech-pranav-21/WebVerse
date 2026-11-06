@@ -71,7 +71,7 @@ describe('AI settings', () => {
     assert.equal(saveAiSettings(null, DEFAULT_AI_SETTINGS), false);
     const ok = new FakeStore();
     saveAiSettings(ok, { ...DEFAULT_AI_SETTINGS, enabled: true });
-    assert.deepEqual(Object.keys(JSON.parse(ok.data.get(AI_SETTINGS_KEY)!)).sort(), ['autoAcknowledged', 'autoOnMotion', 'categories', 'cooldownSec', 'enabled', 'retainSnapshot']);
+    assert.deepEqual(Object.keys(JSON.parse(ok.data.get(AI_SETTINGS_KEY)!)).sort(), ['autoAcknowledged', 'autoOnMotion', 'categories', 'cooldownSec', 'enabled', 'model', 'provider', 'retainSnapshot']);
   });
 
   it('anyCategoryEnabled', () => {

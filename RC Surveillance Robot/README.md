@@ -1,122 +1,193 @@
 # RC Surveillance Robot
 
-A surveillance dashboard for an RC robot with an ESP32-CAM: live MJPEG video, snapshots, browser-side motion detection, AI scene description (Groq), pose estimation and activity recognition (YOLOv8 pose), event history, diagnostics and settings.
+> A local-first surveillance dashboard for an ESP32-CAM stream, browser-side monitoring, and optional AI-assisted scene analysis.
 
-> **This is a surveillance application, not a driving application.** Motor control, steering, firmware and remote driving are not implemented.
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-local%20pose%20service-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 
-This project is part of the [WebVerse](../README.md) repository. Like the other WebVerse projects it is independent: it has its own dependencies, its own build and its own deployment.
+![Dashboard diagnostics view](docs/images/diagnostics-desktop-top.png)
 
-## What is in this folder
+## Overview
 
-| Folder | What it is |
+RC Surveillance Robot is the software console for monitoring an ESP32-CAM-equipped robot on a local network. It presents the camera stream, connection state, motion events, snapshots, diagnostics, and optional visual analysis in one React dashboard.
+
+The ESP32-CAM supplies an MJPEG stream or still-image endpoint; the dashboard does not include motor-driver firmware, steering controls, or autonomous navigation. When the camera permits browser frame access through CORS, the browser can capture frames for smart snapshots, motion detection, local pose estimation, and optional cloud AI recognition.
+
+Local computer vision runs through a loopback FastAPI service using YOLOv8 Pose. It returns human keypoints and feeds a temporal activity-recognition layer. Cloud scene recognition is kept separate behind a local Node.js gateway, which supports Groq, Google Gemini, and OpenAI without exposing provider keys to the browser.
+
+## Features
+
+- ESP32-CAM MJPEG streaming with configurable stream and snapshot routes.
+- Connection monitoring, manual reconnect, bounded automatic retries, and connection history.
+- Browser-side motion detection and motion-event history.
+- Smart snapshots stored in the browser's IndexedDB, with download and deletion controls.
+- Local YOLOv8 Pose estimation and temporal human activity recognition through FastAPI.
+- A local Node.js AI gateway with Groq, Google Gemini, and OpenAI provider adapters.
+- AI event history, diagnostics, redacted diagnostic-report export, and configurable settings.
+- Two deployment modes: a key-free public demo build and local hardware mode.
+
+## Screenshot gallery
+
+The repository currently contains real diagnostics captures only. They are shown below without substituting mockups for the other pages.
+
+| Dashboard diagnostics | Recovery diagnostics |
 | --- | --- |
-| [`frontend/`](./frontend/) | The dashboard (React 19, TypeScript, Vite, Tailwind CSS) and, in `frontend/server/`, the small Node backend that holds the Groq key and calls Groq. |
-| [`activity-recognition/`](./activity-recognition/) | The Python FastAPI service for pose estimation and activity recognition. Runs the YOLOv8-pose model (`yolov8n-pose.pt`, included) on your own computer. |
-| [`ACTIVITY_RECOGNITION_REPORT.md`](./ACTIVITY_RECOGNITION_REPORT.md) | Report on the activity-recognition work. |
+| ![Dashboard diagnostics](docs/images/diagnostics-desktop-top.png) | ![Diagnostics after an outage](docs/images/diagnostics-desktop-lower-after-outage.png) |
 
-The detailed guides are [`frontend/README.md`](./frontend/README.md) (camera setup, diagnostics, motion detection, Groq, hardware guidelines) and [`activity-recognition/README.md`](./activity-recognition/README.md) (the pose service).
+| Mobile diagnostics | Report export |
+| --- | --- |
+| ![Mobile diagnostics](docs/images/diagnostics-mobile-top.png) | ![Diagnostic report copied](docs/images/copy-report-success.png) |
 
-## Two ways to run it
+Screenshots for AI Recognition, Pose Estimation, Motion Detection, Snapshots, Event History, and Settings have not been added because no verified captures for those views are present in the repository.
 
-The camera is on your private network, so a website on the internet cannot see it. The project therefore has two clearly separate modes.
+## Real Hardware Prototype
 
-| | Mode A: Public demo | Mode B: Local Hardware Mode |
-| --- | --- | --- |
-| Where | Hosted on the web (`npm run build:demo`) | On your computer, on the same network as the ESP32-CAM |
-| Robot / camera | None. The page says **"Public demo: no robot is connected"** | Your real ESP32-CAM (or the included mock camera for testing) |
-| AI description (Groq) | Not available | Node backend on `127.0.0.1:8787`, with your key in a local `.env` |
-| Pose / activity | Not available | Python service on `127.0.0.1:8000` |
-| Secrets | None. The demo is static files only | `GROQ_API_KEY`, server side only |
+Photographs of the physical RC Surveillance Robot test prototype:
 
-The hosted demo does not claim a live connection and has no backend. It cannot reach a camera at an address like `http://192.168.1.100`: a page served over HTTPS may not load unencrypted HTTP content (mixed content), and the camera is not reachable from the internet. Nothing in this repository makes the physical robot remotely accessible.
+| Prototype top view | Front camera elevation |
+| --- | --- |
+| ![Prototype top view](docs/images/Hardware.jpeg) | ![Front camera elevation](docs/images/Hardware%202.jpeg) |
 
-## Mode B: run it locally with the robot
+| Component breakdown |
+| --- |
+| ![Component breakdown](docs/images/Hardware%20Component.jpeg) |
 
-Prerequisites: Node.js 20.19 or newer (22 recommended), Python 3.10 or newer, a Groq API key only if you want AI descriptions.
+### Hardware components
 
-```bash
-cd frontend
-npm install
-```
-
-Copy the example settings and add your key. `.env` is git-ignored; never commit it.
-
-```bash
-cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
-```
-
-Edit `.env`: set `GROQ_API_KEY` and the camera address (`VITE_CAMERA_BASE_URL`, for example `http://192.168.1.100`). Leave `AI_SERVER_PORT` at 8787 (any free port except 3000 works; 3000 is the dashboard itself).
-
-Start the three parts, each in its own terminal:
-
-```bash
-# 1. AI backend (Groq) on 127.0.0.1:8787, from the frontend folder
-npm run server
-```
-
-```bash
-# 2. Dashboard on http://localhost:3000, from the frontend folder
-npm run dev
-```
-
-```bash
-# 3. Pose and activity service on 127.0.0.1:8000, from this project folder
-pip install -r activity-recognition/requirements.txt
-python activity-recognition/run_service.py
-```
-
-Then open http://localhost:3000 and set the camera stream path in Settings (it stays empty until you confirm your firmware's route; see [`frontend/README.md`](./frontend/README.md), section 6). Open the dashboard from `http://localhost:3000`, not from an HTTPS address.
-
-To try everything without hardware or a Groq key, the project ships mocks: `frontend/tools/mock-esp32-cam` (a fake camera) and `frontend/tools/mock-groq` (a fake Groq that returns canned answers). See `frontend/README.md`, sections 12 and 16.
-
-## Mode A: deploy the public demo
-
-The demo is the dashboard built with `npm run build:demo` (`vite build --mode demo`). It is a static site: no server, no secrets. In this build the camera address starts empty, `VITE_CAMERA_BASE_URL` is ignored, and the dashboard shows the demo notice.
-
-Deploy it as its own project (on Vercel, for example):
-
-1. Import the `Tech-pranav-21/WebVerse` repository as a new project.
-2. Set **Root Directory** to `RC Surveillance Robot/frontend`.
-3. Leave the build settings to [`frontend/vercel.json`](./frontend/vercel.json): install `npm ci`, build `npm run build:demo`, output `dist`.
-4. Use Node.js 20.19 or newer (22.x) in the project settings.
-5. Add **no** environment variables. In particular never add `GROQ_API_KEY` or a camera address here.
-6. Deploy, then open the URL. You should see "Public demo: no robot is connected" above a camera that says "Not configured".
-
-To check the demo locally first: `cd frontend && npm run build:demo && npm run preview`.
-
-## Environment variables
-
-| Variable | Read by | Meaning | Default |
+| Component | Role | Verification status | Notes |
 | --- | --- | --- | --- |
-| `VITE_CAMERA_BASE_URL` | dashboard (build time) | Camera address. Written into the page, so never set it for a public build (the demo build ignores it). | `http://192.168.1.100` |
-| `VITE_CAMERA_STREAM_PATH` | dashboard (build time) | Stream route, e.g. `:81/stream`. | empty (unconfirmed) |
-| `VITE_CAMERA_SNAPSHOT_PATH` | dashboard (build time) | Snapshot route. | `/capture` |
-| `GROQ_API_KEY` | Node backend only | Groq key. Never exposed to the browser. Empty keeps AI off. | empty |
-| `GROQ_MODEL` | Node backend | Groq vision model. | `qwen/qwen3.8-27b` |
-| `GROQ_API_BASE_URL` | Node backend | For testing with the mock only. | `https://api.groq.com/openai/v1` |
-| `AI_SERVER_HOST` / `AI_SERVER_PORT` | Node backend; the port also by the Vite proxy | Where the backend listens. Keep the host on loopback. | `127.0.0.1` / `8787` |
-| `AI_RATE_PER_MINUTE`, `AI_MAX_PER_DAY`, `AI_MAX_CONCURRENT` | Node backend | Limits that protect your Groq quota. | `6`, `100`, `1` |
-| `AI_MAX_IMAGE_BYTES`, `AI_REQUEST_TIMEOUT_MS`, `AI_MAX_RETRIES` | Node backend | Size, timeout and retry limits. | `1500000`, `20000`, `1` |
-| `AI_ALLOWED_ORIGINS` | Node backend | Extra browser origins allowed to call it. Pages on localhost are always allowed. | empty |
-| `POSE_SERVICE_HOST` / `POSE_SERVICE_PORT` | Python service; the port also by the Vite proxy | Where the pose service listens. | `127.0.0.1` / `8000` |
-| `POSE_ALLOWED_ORIGINS` | Python service | Extra browser origins allowed to call it. Pages on localhost are always allowed; `*` is ignored. | empty |
-| `POSE_DEVICE`, `POSE_MODEL_NAME`, `POSE_*_THRESHOLD`, `HAR_*` | Python service | Device, model and tuning values. See [`activity-recognition/config.py`](./activity-recognition/config.py). | see file |
+| **Arduino Uno** | Main controller | Visually verified on prototype | Microcontroller coordinating onboard logic and peripheral signaling |
+| **ESP32-CAM** | Camera module | Visually verified on prototype | Forward-mounted optical capture unit with 2.4 GHz Wi-Fi for local MJPEG/JPEG streaming |
+| **HC-SR04** | Ultrasonic distance sensor | Architecture specification | Specified in system design BOM for ranging; unmounted on current chassis deck |
+| **Bluetooth module** | Wireless communication | Visually verified on prototype | Serial communication transceiver wired for local telemetry |
+| **L298N** | Motor driver | Visually verified on prototype | Dual H-bridge driver module with heatsink for driving DC propulsion motors |
+| **DC motors & wheels** | Mobility | Visually verified on prototype | Geared DC motors and rubber treaded wheels mounted on the chassis |
+| **Battery pack & buck converter** | Power supply & regulation | Visually verified on prototype | Multi-cell battery assembly with protection board (BMS) and step-down buck converter |
+| **LCD display** | Information display | Visually verified on prototype | 16x2 alphanumeric display module for status and network feedback |
 
-The Node backend reads a `.env` file in the folder it is started from. The Python service reads only real environment variables. [`frontend/.env.example`](./frontend/.env.example) documents all of them.
+### Prototype status and operational reality
 
-## Security notes
+- **Physical hardware prototype:** The photographs above document the physical benchtop assembly. The platform includes an Arduino Uno, forward-facing ESP32-CAM, power regulation, motor driver, LCD screen, and chassis.
+- **Simulated public showcase:** The hosted public demonstration website uses simulated data and pre-rendered layouts. It does not communicate with or send commands to the physical robot.
+- **Honest boundaries:** Autonomous navigation, obstacle avoidance, on-device microcontroller AI inference, and closed-loop wireless control are not implemented or verified in this repository.
 
-- `GROQ_API_KEY` lives only in the Node backend. It has no `VITE_` prefix, so Vite never puts it into the web page. Never rename it.
-- `.env` files are git-ignored. Only `.env.example` files are committed.
-- Both backends accept browser requests only from pages served from your own machine (plus origins you list explicitly). Neither answers with a wildcard origin.
-- Both backends listen on `127.0.0.1` by default. `npm run dev` listens on all interfaces (the dashboard can then be opened from another device), and its `/api` proxy forwards to the loopback backends, so anyone on your network who can reach port 3000 can use them. On a network you do not trust, run `npx vite --port 3000 --host 127.0.0.1` instead.
-- Do not put the Node backend or the pose service on a public address. They have no login, and the Groq backend spends your quota.
+## Architecture
 
-## Tests
+```mermaid
+flowchart LR
+  Camera[ESP32-CAM\nMJPEG stream / snapshot]
+  Browser[React + TypeScript dashboard]
+  Motion[Browser motion detection\nIndexedDB snapshots]
+  Node[Node.js AI gateway]
+  FastAPI[Python FastAPI pose service]
+  YOLO[YOLOv8 Pose + activity recognition]
+  Groq[Groq]
+  Gemini[Google Gemini]
+  OpenAI[OpenAI]
 
-```bash
-cd frontend && npm run lint && npm test                          # type checks and 842 unit tests
-cd activity-recognition && python -m unittest discover -p "test_*.py"   # 200 Python tests (they run the real model)
+  Camera -->|local MJPEG or JPEG| Browser
+  Browser --> Motion
+  Browser -->|frame /api/pose| FastAPI
+  FastAPI --> YOLO
+  Browser -->|frame /api/ai/recognize| Node
+  Node --> Groq
+  Node --> Gemini
+  Node --> OpenAI
 ```
 
-All of these use mocks or local files; no test contacts Groq or a camera. Real Groq inference and a physical ESP32-CAM have not been tested in this repository.
+The browser talks directly to the camera on the local network. It sends selected frames to the loopback pose service or Node gateway only when those features are used. The Node gateway makes the external provider request and keeps provider keys server-side. This diagram describes the software; physical motor control is outside this project.
+
+For implementation details, see [the architecture guide](docs/architecture.md).
+
+## Technology stack
+
+| Layer | Technology |
+| --- | --- |
+| Dashboard | React, TypeScript, Vite, Tailwind CSS |
+| AI gateway | Node.js native HTTP server |
+| Local vision | Python, FastAPI, Ultralytics YOLOv8 Pose, PyTorch |
+| Browser storage | IndexedDB and localStorage |
+| Optional AI providers | Groq, Google Gemini, OpenAI APIs |
+| Camera | ESP32-CAM-compatible MJPEG/JPEG HTTP endpoints |
+
+## Installation
+
+### Prerequisites
+
+- Node.js `>=20.19.0` and npm
+- Python 3.10 or later
+- An ESP32-CAM only for local hardware mode
+
+```bash
+git clone https://github.com/Tech-pranav-21/WebVerse.git
+cd "WebVerse/RC Surveillance Robot/frontend"
+npm install
+
+cd ../activity-recognition
+python -m pip install -r requirements.txt
+```
+
+Create the local configuration file from `frontend/`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Set the camera URL and only the AI-provider keys you intend to use. Keep `.env` local; it is ignored by Git. See the [setup guide](docs/setup-guide.md) for the exact variables and terminal sequence.
+
+Run the services in separate terminals:
+
+```bash
+# frontend/
+npm run server
+
+# frontend/
+npm run dev
+
+# activity-recognition/
+python run_service.py
+```
+
+Open `http://localhost:3000`.
+
+## Demo and local hardware modes
+
+| | Public demo | Local hardware |
+| --- | --- | --- |
+| Build command | `npm run build:demo` | `npm run dev` |
+| Camera | No camera configured | ESP32-CAM on the local network |
+| AI gateway and pose service | Not required | Required for their respective features |
+| Provider keys | Never bundle them | Stored only in local `frontend/.env` |
+
+The public demo is a key-free presentation build. It shows a clearly marked simulated camera layout, sample AI/motion/pose/snapshot/event/diagnostic states, and a hardware overview; it makes no camera, localhost, AI-provider, or pose-service request. It does not use fabricated footage or claim that its sample results are live. Live streaming, browser-readable frame features, pose estimation, and live provider calls require Local Hardware Mode and, where applicable, an ESP32-CAM configured for CORS.
+
+### Static deployment
+
+Vercel is configured in `frontend/vercel.json`: it runs `npm ci`, builds with `npm run build:demo`, and publishes `frontend/dist`. For another static host, use the same command and deploy `dist/`. Do not add `.env`, camera addresses, provider keys, or a local API proxy to the public deployment. The showcase has no price, inventory, or purchase link; to show a verified contact, set `VITE_PROJECT_CONTACT_URL` to an `https://` or `mailto:` address at build time. It is public by design and must not contain a secret.
+
+## Limitations
+
+- Live ESP32-CAM integration has not been verified in this repository.
+- Live Groq, Gemini, and OpenAI requests have not been verified here.
+- Physical motor control and autonomous navigation are not implemented.
+- Motion analysis, snapshots, pose estimation, and AI frame submission depend on browser-readable camera frames; a camera without suitable CORS headers restricts those features.
+- The project needs a compatible ESP32-CAM firmware image, a 2.4 GHz local network, and appropriate power hardware; firmware is not included.
+
+## Roadmap
+
+- Add verified captures for each dashboard view.
+- Validate the local hardware flow with a documented ESP32-CAM firmware configuration.
+- Add integration evidence for each supported AI provider.
+- Evaluate a low-latency stream transport after hardware validation.
+
+## Documentation
+
+- [Setup guide](docs/setup-guide.md)
+- [Hardware and network guide](docs/hardware-guide.md)
+- [Architecture](docs/architecture.md)
+
+## License
+
+No repository-level license file is currently included. Do not assume a license grant until one is added.

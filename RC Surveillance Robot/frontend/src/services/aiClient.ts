@@ -6,16 +6,21 @@
 import {
   AiBackendStatus,
   AiErrorCode,
+  AiProviderId,
+  CONFIG_PATH,
   RECOGNIZE_PATH,
   RecognizeRequest,
   RecognizeSuccess,
   STATUS_PATH,
+  TEST_CONNECTION_PATH,
+  TestConnectionResponse,
+  UpdateAiConfigResponse,
 } from '../../server/protocol';
 
 /**
  * Browser side of the AI backend. The browser only ever talks to this app's own backend
- * (/api/ai/..., proxied by Vite); the backend holds the Groq key and calls Groq. Nothing here can
- * reach Groq, and nothing here knows the key.
+ * (/api/ai/..., proxied by Vite); the backend holds the provider keys and calls upstream APIs.
+ * Nothing here can leak keys, and nothing in the frontend knows them.
  */
 
 export class AiClientError extends Error {
@@ -34,18 +39,36 @@ export interface AiClientOptions {
   fetchImpl?: typeof fetch;
   /** Prefix for the API paths (empty = same origin). */
   baseUrl?: string;
-  /** Longer than the server's own Groq timeout, so the server's answer arrives first. */
   recognizeTimeoutMs?: number;
   statusTimeoutMs?: number;
 }
 
+export interface RecognizeOptions {
+  provider?: AiProviderId;
+  model?: string;
+}
+
 export interface AiClient {
   status(signal?: AbortSignal): Promise<AiBackendStatus>;
-  recognize(frame: Blob, signal?: AbortSignal): Promise<RecognizeSuccess>;
+  recognize(
+    frame: Blob,
+    optionsOrSignal?: RecognizeOptions | AbortSignal,
+    maybeSignal?: AbortSignal,
+  ): Promise<RecognizeSuccess>;
+  testConnection(
+    provider: AiProviderId,
+    model?: string,
+    signal?: AbortSignal,
+  ): Promise<TestConnectionResponse>;
+  updateConfig(
+    activeProvider?: AiProviderId,
+    model?: string,
+    signal?: AbortSignal,
+  ): Promise<UpdateAiConfigResponse>;
 }
 
 const BACKEND_DOWN_MESSAGE =
-  'The AI backend is not reachable. Start it with "npm run server" and make sure its Groq key is configured (see the README, section 16).';
+  'The AI backend is not reachable. Start it with "npm run server" and ensure provider credentials are configured on the server.';
 
 /** Base64 of the blob's bytes, without allocating one giant string at once. */
 export async function blobToBase64(blob: Blob): Promise<string> {
@@ -64,7 +87,12 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
   const recognizeTimeoutMs = options.recognizeTimeoutMs ?? 30_000;
   const statusTimeoutMs = options.statusTimeoutMs ?? 5_000;
 
-  async function call(path: string, init: RequestInit, timeoutMs: number, outer?: AbortSignal): Promise<{ response: Response; json: any }> {
+  async function call(
+    path: string,
+    init: RequestInit,
+    timeoutMs: number,
+    outer?: AbortSignal,
+  ): Promise<{ response: Response; json: any }> {
     if (outer?.aborted) throw new AiClientError('cancelled', 'The request was cancelled.');
     const controller = new AbortController();
     let timedOut = false;
@@ -87,7 +115,6 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       try {
         json = await response.json();
       } catch {
-        // Not JSON: typically the dev server's own error page when the backend is not running.
         throw new AiClientError('backend_unreachable', BACKEND_DOWN_MESSAGE, undefined, response.status);
       }
       return { response, json };
@@ -114,8 +141,24 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
       return json as AiBackendStatus;
     },
 
-    async recognize(frame, signal) {
-      const body: RecognizeRequest = { imageBase64: await blobToBase64(frame), mimeType: 'image/jpeg' };
+    async recognize(frame, optionsOrSignal, maybeSignal) {
+      let opts: RecognizeOptions = {};
+      let signal: AbortSignal | undefined;
+
+      if (optionsOrSignal && 'aborted' in optionsOrSignal) {
+        signal = optionsOrSignal as AbortSignal;
+      } else {
+        opts = (optionsOrSignal as RecognizeOptions) || {};
+        signal = maybeSignal;
+      }
+
+      const body: RecognizeRequest = {
+        imageBase64: await blobToBase64(frame),
+        mimeType: 'image/jpeg',
+        ...(opts.provider ? { provider: opts.provider } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
+      };
+
       const { response, json } = await call(
         RECOGNIZE_PATH,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
@@ -127,6 +170,40 @@ export function createAiClient(options: AiClientOptions = {}): AiClient {
         throw toError(json, response.status);
       }
       return json as RecognizeSuccess;
+    },
+
+    async testConnection(provider, model, signal) {
+      const { response, json } = await call(
+        TEST_CONNECTION_PATH,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, model }),
+        },
+        15_000,
+        signal,
+      );
+      if (!response.ok || !json) {
+        throw toError(json, response.status);
+      }
+      return json as TestConnectionResponse;
+    },
+
+    async updateConfig(activeProvider, model, signal) {
+      const { response, json } = await call(
+        CONFIG_PATH,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activeProvider, model }),
+        },
+        5_000,
+        signal,
+      );
+      if (!response.ok || !json) {
+        throw toError(json, response.status);
+      }
+      return json as UpdateAiConfigResponse;
     },
   };
 }

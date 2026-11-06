@@ -4,38 +4,55 @@
  */
 
 import { readFileSync } from 'node:fs';
+import type { AiProviderId } from './protocol.js';
 
 /**
  * Server configuration, read from environment variables (and an optional .env file).
  *
- * GROQ_API_KEY lives only here, on the server. It is never returned by any endpoint, never logged,
- * never put in a response, and the browser bundle does not contain it: Vite only exposes variables
- * that start with VITE_, and this one deliberately does not.
+ * Provider API keys live only here, on the server. They are never returned by any endpoint,
+ * never logged, never put in a response, and the browser bundle does not contain them: Vite
+ * only exposes variables that start with VITE_, and these deliberately do not.
  */
 
-/** Groq lists this model as "Preview". The default can be replaced with GROQ_MODEL. */
 export const DEFAULT_MODEL = 'qwen/qwen3.8-27b';
 export const DEFAULT_GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
+export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com';
 
-export interface ServerConfig {
-  /** undefined = not configured (the endpoint answers "not_configured"). */
+export interface ProviderConfigItem {
   apiKey: string | undefined;
   model: string;
-  groqBaseUrl: string;
+  baseUrl?: string;
+}
+
+export interface ServerConfig {
+  activeProvider: AiProviderId;
+  providers: {
+    groq: ProviderConfigItem;
+    gemini: ProviderConfigItem;
+    openai: ProviderConfigItem;
+  };
   port: number;
   host: string;
   /** Largest decoded JPEG accepted. Camera frames are typically 20 to 60 kB. */
   maxImageBytes: number;
-  /** Requests this server forwards to Groq per rolling minute / per rolling 24 h (all clients together). */
+  /** Requests this server forwards per rolling minute / per rolling 24 h (all clients together). */
   ratePerMinute: number;
   maxPerDay: number;
-  /** Simultaneous requests to Groq. */
+  /** Simultaneous requests to upstream AI providers. */
   maxConcurrent: number;
   requestTimeoutMs: number;
-  /** Extra retries for a transient failure (429 with a short Retry-After, 5xx, network error). Timeouts are never retried. */
+  /** Extra retries for a transient failure. Timeouts are never retried. */
   maxRetries: number;
   /** Browser origins allowed in addition to any http(s)://localhost, 127.0.0.1 or [::1] page. */
   allowedOrigins: string[];
+
+  // Compatibility accessors for existing code/tests expecting single-provider fields
+  apiKey: string | undefined;
+  model: string;
+  groqBaseUrl: string;
 }
 
 function intIn(raw: string | undefined, fallback: number, min: number, max: number): number {
@@ -46,11 +63,38 @@ function intIn(raw: string | undefined, fallback: number, min: number, max: numb
 }
 
 export function loadConfig(env: Record<string, string | undefined>): ServerConfig {
-  const key = env.GROQ_API_KEY?.trim();
-  return {
-    apiKey: key ? key : undefined,
-    model: env.GROQ_MODEL?.trim() || DEFAULT_MODEL,
-    groqBaseUrl: (env.GROQ_API_BASE_URL?.trim() || DEFAULT_GROQ_BASE_URL).replace(/\/+$/, ''),
+  const groqKey = env.GROQ_API_KEY?.trim() || undefined;
+  const geminiKey = env.GEMINI_API_KEY?.trim() || undefined;
+  const openaiKey = env.OPENAI_API_KEY?.trim() || undefined;
+
+  let active: AiProviderId = 'groq';
+  const requestedActive = env.ACTIVE_AI_PROVIDER?.trim().toLowerCase();
+  if (requestedActive === 'gemini' || requestedActive === 'openai' || requestedActive === 'groq') {
+    active = requestedActive;
+  } else if (!groqKey && geminiKey) {
+    active = 'gemini';
+  } else if (!groqKey && !geminiKey && openaiKey) {
+    active = 'openai';
+  }
+
+  const groqModel = env.GROQ_MODEL?.trim() || DEFAULT_MODEL;
+  const groqBaseUrl = (env.GROQ_API_BASE_URL?.trim() || DEFAULT_GROQ_BASE_URL).replace(/\/+$/, '');
+
+  const geminiModel = env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+  const geminiBaseUrl = (env.GEMINI_API_BASE_URL?.trim() || DEFAULT_GEMINI_BASE_URL).replace(/\/+$/, '');
+
+  const openaiModel = env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+  const openaiBaseUrl = (env.OPENAI_API_BASE_URL?.trim() || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, '');
+
+  const providers = {
+    groq: { apiKey: groqKey, model: groqModel, baseUrl: groqBaseUrl },
+    gemini: { apiKey: geminiKey, model: geminiModel, baseUrl: geminiBaseUrl },
+    openai: { apiKey: openaiKey, model: openaiModel, baseUrl: openaiBaseUrl },
+  };
+
+  const config: ServerConfig = {
+    activeProvider: active,
+    providers,
     port: intIn(env.AI_SERVER_PORT, 8787, 1, 65535),
     host: env.AI_SERVER_HOST?.trim() || '127.0.0.1',
     maxImageBytes: intIn(env.AI_MAX_IMAGE_BYTES, 1_500_000, 10_000, 4_000_000),
@@ -63,7 +107,32 @@ export function loadConfig(env: Record<string, string | undefined>): ServerConfi
       .split(',')
       .map((o) => o.trim().replace(/\/+$/, ''))
       .filter(Boolean),
+
+    get apiKey() {
+      return this.providers[this.activeProvider]?.apiKey;
+    },
+    set apiKey(val: string | undefined) {
+      if (this.providers[this.activeProvider]) {
+        this.providers[this.activeProvider].apiKey = val;
+      }
+    },
+    get model() {
+      return this.providers[this.activeProvider]?.model || DEFAULT_MODEL;
+    },
+    set model(val: string) {
+      if (this.providers[this.activeProvider]) {
+        this.providers[this.activeProvider].model = val;
+      }
+    },
+    get groqBaseUrl() {
+      return this.providers.groq.baseUrl || DEFAULT_GROQ_BASE_URL;
+    },
+    set groqBaseUrl(val: string) {
+      this.providers.groq.baseUrl = val;
+    },
   };
+
+  return config;
 }
 
 /** Parse the text of a .env file: KEY=VALUE lines, # comments, optional quotes. Never evaluates anything. */

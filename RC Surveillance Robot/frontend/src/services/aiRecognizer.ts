@@ -289,7 +289,11 @@ export class AiRecognizer {
 
       let response: RecognizeSuccess;
       try {
-        response = await this.client.recognize(frame.blob, controller.signal);
+        response = await this.client.recognize(
+          frame.blob,
+          { provider: s.provider, model: s.model },
+          controller.signal,
+        );
       } catch (err) {
         return this.onClientError(describeError(err), trigger, motion, gen, now);
       }
@@ -336,6 +340,7 @@ export class AiRecognizer {
       t: startedAt,
       trigger,
       status: 'success',
+      provider: response.provider || s.provider,
       model: response.model,
       summary: response.result.summary,
       objects,
@@ -372,6 +377,8 @@ export class AiRecognizer {
       t: startedAt,
       trigger,
       status: 'failed',
+      provider: this.settings.provider,
+      model: this.settings.model,
       objects: [],
       category: 'none',
       matched: false,

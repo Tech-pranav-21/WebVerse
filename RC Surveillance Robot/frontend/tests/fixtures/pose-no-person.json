@@ -4,8 +4,8 @@
   "persons": [],
   "image_width": 640,
   "image_height": 480,
-  "inference_time_ms": 51.3,
-  "total_time_ms": 52.3,
+  "inference_time_ms": 55.2,
+  "total_time_ms": 56.3,
   "device": "cpu",
   "model": "yolov8n-pose.pt",
   "activity_recognition": {

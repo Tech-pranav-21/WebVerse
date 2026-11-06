@@ -4,27 +4,43 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CheckCircle2, ChevronRight, Loader2, ScanSearch, Trash2, Wifi, WifiOff } from 'lucide-react';
+import {
+  AlertCircle,
+  Camera,
+  CheckCircle2,
+  Cpu,
+  HelpCircle,
+  Key,
+  Loader2,
+  RefreshCw,
+  ScanSearch,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
 import type { CameraConfig, StreamHealth, SurveillanceViewMode } from '../types/camera';
-import type { AiEvent } from '../types/ai';
-import { RecognizedObject } from '../../server/protocol';
+import type { AiEvent, AiProviderId } from '../types/ai';
 import { useAiRecognition } from '../hooks/useAiRecognition';
 import { useNow } from '../hooks/useNow';
 import type { SmartSnapshotApi } from '../hooks/useSmartSnapshot';
 import type { MotionEventBus } from '../services/motionEventBus';
-import { CATEGORY_LABELS } from '../services/aiSettings';
+import { createAiClient } from '../services/aiClient';
+import {
+  CATEGORY_LABELS,
+  PROVIDER_METADATA,
+} from '../services/aiSettings';
 import { describeSnapshotLink } from '../services/snapshotLinkText';
 import { formatEventTime } from '../services/streamStatusText';
 import { SnapshotImage } from './SnapshotImage';
 import { AiSettingsFields } from './settingsFields';
 import {
-  BTN_DANGER_SOLID,
   BTN_GHOST,
   BTN_PRIMARY,
   BTN_SECONDARY,
   BadgeTone,
   Disclosure,
-  Hint,
   Notice,
   Panel,
   StatusBadge,
@@ -40,23 +56,16 @@ export interface AiRecognitionPanelProps {
   config: CameraConfig;
   smart: SmartSnapshotApi;
   motionBus: MotionEventBus;
-  /** Turns on Settings > "Allow snapshot capture" (what lets the page read the picture's pixels). */
   onEnableCapture: () => void;
-  /**
-   * True after "AI Analyze" was pressed on the Dashboard: run ONE analysis as soon as the picture is
-   * there, but only if external AI processing is switched on.
-   */
   analyzePending?: boolean;
-  /** Tells the page the request was run, skipped or timed out, so it never fires twice. */
   onAnalyzeHandled?: () => void;
-  /** Opens the Event History page on the AI recognitions. */
   onViewAll?: () => void;
-  /** Reports the calculated AI service status badge up to the page header. */
   onStatusChange?: (badge: { label: string; tone: BadgeTone; busy?: boolean }) => void;
 }
 
 const categoryName = (c: string) =>
   c in CATEGORY_LABELS ? CATEGORY_LABELS[c as keyof typeof CATEGORY_LABELS] : c === 'unknown' ? 'Unknown' : c === 'none' ? 'Nothing recognised' : c;
+
 const singular = (c: string) =>
   ({ person: 'Person', animal: 'Animal', vehicle: 'Vehicle', other: 'Other', unknown: 'Unknown', none: 'None' } as Record<string, string>)[c] ?? c;
 
@@ -66,9 +75,6 @@ const waitText = (ms: number) => {
 };
 
 const CHIP = 'inline-flex items-center px-2 py-0.5 rounded-md border text-xs font-medium';
-/** How many recognitions the card lists; the rest are on the Event History page. */
-const RECENT_COUNT = 5;
-/** A pending Dashboard request is dropped after this long if the picture or backend never became ready. */
 const PENDING_TIMEOUT_MS = 15_000;
 
 export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
@@ -97,26 +103,107 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
     smart,
     motionBus,
   });
+
   const { state, history } = ai;
   const { settings, backend } = state;
   const now = useNow(state.blockedUntil !== null || state.autoCooldownUntil !== null || state.analyzing, 1000);
+
   const galleryById = React.useMemo(() => new Map(smart.items.map((i) => [i.id, i])), [smart.items]);
   const galleryIds = React.useMemo(() => new Set(galleryById.keys()), [galleryById]);
 
+  // Multi-Provider state
+  const [selectedProvider, setSelectedProvider] = useState<AiProviderId>(settings.provider || 'groq');
+  const [selectedModel, setSelectedModel] = useState<string>(settings.model || PROVIDER_METADATA[settings.provider || 'groq'].defaultModel);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    status: string;
+    message: string;
+    latencyMs?: number;
+  } | null>(null);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSuccessMsg, setConfigSuccessMsg] = useState<string | null>(null);
+
+  const client = React.useMemo(() => createAiClient(), []);
+
+  // Sync selected provider when settings change
+  useEffect(() => {
+    if (settings.provider && settings.provider !== selectedProvider) {
+      setSelectedProvider(settings.provider);
+      setSelectedModel(settings.model || PROVIDER_METADATA[settings.provider].defaultModel);
+    }
+  }, [settings.provider, settings.model]);
+
+  // Keep selected model updated when switching providers
+  const handleSelectProvider = (prov: AiProviderId) => {
+    setSelectedProvider(prov);
+    const defModel = backend.kind === 'ready' && backend.status.providers?.[prov]?.model
+      ? backend.status.providers[prov].model
+      : PROVIDER_METADATA[prov].defaultModel;
+    setSelectedModel(defModel);
+    setTestResult(null);
+    setConfigSuccessMsg(null);
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+    setConfigSuccessMsg(null);
+    try {
+      const res = await client.testConnection(selectedProvider, selectedModel);
+      setTestResult({
+        ok: res.ok,
+        status: res.status,
+        message: res.message,
+        latencyMs: res.latencyMs,
+      });
+    } catch (err: any) {
+      setTestResult({
+        ok: false,
+        status: 'failed',
+        message: err.message || 'Connection test failed to complete.',
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
+  const handleSaveActiveConfig = async () => {
+    setIsSavingConfig(true);
+    setConfigSuccessMsg(null);
+    try {
+      await client.updateConfig(selectedProvider, selectedModel);
+      ai.configure({ provider: selectedProvider, model: selectedModel });
+      await ai.refreshBackend();
+      setConfigSuccessMsg(`Active AI provider set to ${PROVIDER_METADATA[selectedProvider].name} (${selectedModel}).`);
+    } catch (err: any) {
+      setTestResult({
+        ok: false,
+        status: 'failed',
+        message: `Failed to update configuration: ${err.message}`,
+      });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
+
   const blockedMs = state.blockedUntil !== null ? state.blockedUntil - now : 0;
   const waiting = blockedMs > 0;
-  const status = backend.kind === 'ready' || backend.kind === 'not-configured' ? backend.status : undefined;
-  const backendProblem =
-    backend.kind === 'not-configured'
-      ? 'The AI backend is running but has no Groq key configured. Add it to the server settings (.env) and restart the backend. See the README, section 16.'
-      : backend.kind === 'unreachable'
-        ? backend.message
-        : backend.kind === 'error'
-          ? backend.message
-          : null;
-  const canAnalyze = settings.enabled && !state.analyzing && !waiting && viewMode === 'stream' && isStreamConfigured && backend.kind !== 'not-configured';
+  const backendStatus = backend.kind === 'ready' || backend.kind === 'not-configured' ? backend.status : undefined;
 
-  // "AI Analyze" on Dashboard handling
+  const activeProvider = backendStatus?.activeProvider || settings.provider || 'groq';
+  const activeProviderConf = backendStatus?.providers?.[activeProvider];
+  const isCurrentProviderConfigured = Boolean(activeProviderConf?.configured);
+
+  const canAnalyze =
+    settings.enabled &&
+    !state.analyzing &&
+    !waiting &&
+    viewMode === 'stream' &&
+    isStreamConfigured &&
+    isCurrentProviderConfigured;
+
+  // "AI Analyze" trigger from Dashboard
   const [skippedNote, setSkippedNote] = useState<string | null>(null);
   const aiRef = useRef(ai);
   aiRef.current = ai;
@@ -126,97 +213,73 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
   useEffect(() => {
     if (!analyzePending) return;
     if (!settings.enabled) {
-      setSkippedNote('AI Analyze did not run: external AI processing is off. Enable it below, then click Analyze Current Frame.');
+      setSkippedNote('AI Analyze did not run: external AI processing is off. Enable it below to analyze frames.');
       onAnalyzeHandled?.();
       return;
     }
-    const timer = setInterval(() => {
-      const img = getImage();
-      if (!readyRef.current || !img || !img.complete || img.naturalWidth === 0) return;
-      clearInterval(timer);
-      setSkippedNote(null);
-      onAnalyzeHandled?.();
+    if (readyRef.current) {
       void aiRef.current.analyze();
-    }, 250);
-    const giveUp = setTimeout(() => {
-      clearInterval(timer);
+      onAnalyzeHandled?.();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSkippedNote('AI Analyze timed out waiting for the camera stream or backend.');
       onAnalyzeHandled?.();
     }, PENDING_TIMEOUT_MS);
-    return () => {
-      clearInterval(timer);
-      clearTimeout(giveUp);
-    };
-  }, [analyzePending, settings.enabled, getImage, onAnalyzeHandled]);
+    return () => clearTimeout(timer);
+  }, [analyzePending, settings.enabled, onAnalyzeHandled]);
 
-  let badge: { label: string; tone: BadgeTone; busy?: boolean } = { label: 'Off', tone: 'neutral' };
-  if (settings.enabled) {
-    badge =
-      state.analyzing
-        ? { label: 'Analyzing', tone: 'warn', busy: true }
-        : backend.kind === 'ready'
-          ? { label: 'Ready', tone: 'good' }
-          : backend.kind === 'checking' || backend.kind === 'unknown'
-            ? { label: 'Checking', tone: 'neutral', busy: true }
-            : { label: 'Backend problem', tone: 'bad' };
-  }
+  // Overall Status Badge calculation
+  const badge: { label: string; tone: BadgeTone; busy?: boolean } =
+    !settings.enabled
+      ? { label: 'AI Disabled', tone: 'neutral' }
+      : backend.kind === 'checking'
+        ? { label: 'Checking AI...', tone: 'neutral', busy: true }
+        : backend.kind === 'unreachable'
+          ? { label: 'Backend Offline', tone: 'bad' }
+          : !isCurrentProviderConfigured
+            ? { label: `${PROVIDER_METADATA[activeProvider].name} Key Missing`, tone: 'warn' }
+            : waiting
+              ? { label: `Rate Limit (${waitText(blockedMs)})`, tone: 'warn' }
+              : state.analyzing
+                ? { label: 'Analyzing Frame...', tone: 'good', busy: true }
+                : { label: `${PROVIDER_METADATA[activeProvider].name} Ready`, tone: 'good' };
 
-  // Sync AI status badge to page header
   useEffect(() => {
     onStatusChange?.(badge);
   }, [badge.label, badge.tone, badge.busy, onStatusChange]);
 
-  const current: AiEvent | null = state.current;
-  const currentThumb = current?.snapshot.snapshotId ? galleryById.get(current.snapshot.snapshotId) : undefined;
-  const matchingCategories = (e: AiEvent) =>
-    e.objects.filter((o) => !o.uncertain && o.category !== 'unknown' && settings.categories[o.category as keyof typeof settings.categories]);
-  const recent = history.events.slice(0, RECENT_COUNT);
+  const current = state.current;
+  const currentThumb =
+    current && current.snapshot.status === 'saved' && current.snapshot.snapshotId
+      ? galleryById.get(current.snapshot.snapshotId)
+      : undefined;
 
-  // Snapshot capture handler from live stream
   const handleCaptureSnapshot = useCallback(async () => {
-    const img = getImage();
-    await smart.captureStill({
-      kind: 'live',
-      image: img,
-      connected: health.status === 'connected',
-      statusLabel: health.status.replace('_', ' '),
-      sourceUrl: streamUrl,
-      corsRequested: Boolean(config.captureCors),
-    });
-  }, [getImage, smart, health.status, streamUrl, config.captureCors]);
+    await smart.captureStill({ kind: 'stream', url: streamUrl });
+  }, [smart, streamUrl]);
 
-  // Camera connection status presentation
-  const camStatus: { label: string; tone: BadgeTone } =
+  const camStatus =
     health.status === 'connected'
-      ? { label: 'Camera Connected', tone: 'good' }
-      : health.status === 'reconnecting'
-        ? { label: 'Camera Reconnecting', tone: 'warn' }
-        : health.status === 'connecting'
-          ? { label: 'Camera Connecting', tone: 'warn' }
-          : health.status === 'error'
-            ? { label: 'Camera Offline', tone: 'bad' }
-            : health.status === 'host_reachable'
-              ? { label: 'Host Reachable', tone: 'accent' }
-              : health.status === 'unconfigured'
-                ? { label: 'Camera Unconfigured', tone: 'neutral' }
-                : { label: 'Camera Disconnected', tone: 'neutral' };
+      ? { label: 'Camera Live', tone: 'good' as BadgeTone }
+      : !isStreamConfigured
+        ? { label: 'Camera Unconfigured', tone: 'neutral' as BadgeTone }
+        : { label: 'Camera Disconnected', tone: 'neutral' as BadgeTone };
 
   return (
     <Panel
       id="ai"
-      title="Groq AI Recognition"
+      title="Multi-AI Vision Recognition"
       icon={ScanSearch}
-      description="Vision AI analysis of the live ESP32-CAM video stream. Analyzes single frames on demand or automatically when motion is detected."
+      description="Visual scene analysis powered by configurable cloud AI providers (Groq, Google Gemini, OpenAI). Analyzes frames on demand or automatically upon motion detection."
       status={
         <StatusBadge role="status" aria-live="polite" tone={badge.tone} busy={badge.busy}>
           {badge.label}
         </StatusBadge>
       }
     >
-      {/* ====================================================================
-          TOP LEVEL: Prominent Camera Preview & Live Action Section
-         ==================================================================== */}
       <div className="grid gap-6 lg:grid-cols-12 items-start">
-        {/* LEFT COLUMN: Prominent Live Camera Preview */}
+        {/* LEFT COLUMN: Camera Source Preview */}
         <div className="lg:col-span-7 space-y-3 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -227,12 +290,10 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
             </StatusBadge>
           </div>
 
-          {/* Prominent Video Slot */}
-          <div className="w-full rounded-xl overflow-hidden border border-line bg-black shadow-[0_0_30px_-12px_rgba(30,140,255,0.4)]">
+          <div className="w-full rounded-xl overflow-hidden border border-line bg-black shadow-[0_0_30px_-12px_rgba(30,140,255,0.3)]">
             {feedSlot}
           </div>
 
-          {/* Camera Controls Under Preview */}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-slate-400">
             <div className="flex items-center gap-2">
               <button
@@ -252,15 +313,148 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
             </div>
             {health.status === 'connected' && (
               <span className="font-mono text-[11px] text-slate-400">
-                Format: {config.captureCors ? 'CORS Enhanced' : 'Standard MJPEG'}
+                Mode: {config.captureCors ? 'CORS Enabled' : 'Standard MJPEG'}
               </span>
             )}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: AI Recognition Actions & Latest Result */}
+        {/* RIGHT COLUMN: AI Provider Selector & Recognition Result */}
         <div className="lg:col-span-5 space-y-4 min-w-0">
-          {/* Analyze Current Frame Action Button */}
+          {/* PROVIDER SELECTION & CONFIGURATION CARD */}
+          <div className="rounded-xl border border-line bg-sunken p-4 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-line pb-2.5">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-cyan-400" />
+                <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
+                  AI Provider Configuration
+                </h3>
+              </div>
+              <StatusBadge tone={isCurrentProviderConfigured ? 'good' : 'warn'}>
+                {PROVIDER_METADATA[activeProvider].name}: {isCurrentProviderConfigured ? 'Configured' : 'No Key'}
+              </StatusBadge>
+            </div>
+
+            {/* Provider Selector Tabs */}
+            <div className="flex rounded-lg bg-raised p-1 border border-line gap-1">
+              {(['groq', 'gemini', 'openai'] as AiProviderId[]).map((provId) => {
+                const isSelected = selectedProvider === provId;
+                const isActive = activeProvider === provId;
+                const isConfigured = Boolean(backendStatus?.providers?.[provId]?.configured);
+                return (
+                  <button
+                    key={provId}
+                    type="button"
+                    onClick={() => handleSelectProvider(provId)}
+                    className={`flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
+                      isSelected
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      {PROVIDER_METADATA[provId].name}
+                      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" title="Active provider" />}
+                    </span>
+                    <span className="text-[10px] opacity-75">
+                      {isConfigured ? 'Key Set' : 'Missing'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Model Selection Row */}
+            <div className="space-y-1.5">
+              <label htmlFor="ai-model-select" className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                <span>Vision Model:</span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {PROVIDER_METADATA[selectedProvider].name}
+                </span>
+              </label>
+              <select
+                id="ai-model-select"
+                value={selectedModel}
+                onChange={(e) => {
+                  setSelectedModel(e.target.value);
+                  setTestResult(null);
+                }}
+                className="w-full bg-raised border border-line rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
+              >
+                {PROVIDER_METADATA[selectedProvider].availableModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m} {m === PROVIDER_METADATA[selectedProvider].defaultModel ? '(Default)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Test & Set Active Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => void handleTestConnection()}
+                disabled={testingConnection}
+                className={`${BTN_SECONDARY} flex-1 !h-8 !text-xs`}
+                title="Test API credentials and model reachability"
+              >
+                {testingConnection ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                ) : (
+                  <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                )}
+                <span>{testingConnection ? 'Testing...' : 'Test Connection'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleSaveActiveConfig()}
+                disabled={isSavingConfig || (activeProvider === selectedProvider && activeProviderConf?.model === selectedModel)}
+                className={`${BTN_PRIMARY} flex-1 !h-8 !text-xs`}
+                title="Set selected provider as active"
+              >
+                {isSavingConfig ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                )}
+                <span>{activeProvider === selectedProvider ? 'Active' : 'Set Active'}</span>
+              </button>
+            </div>
+
+            {/* Test feedback */}
+            {testResult && (
+              <div
+                className={`p-2.5 rounded-lg border text-xs leading-relaxed ${
+                  testResult.ok
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : testResult.status === 'not_configured'
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                }`}
+              >
+                <div className="flex items-center justify-between font-semibold pb-0.5">
+                  <span>Status: {testResult.status.toUpperCase()}</span>
+                  {testResult.latencyMs != null && <span>{testResult.latencyMs} ms</span>}
+                </div>
+                <p>{testResult.message}</p>
+              </div>
+            )}
+
+            {configSuccessMsg && (
+              <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-lg">
+                {configSuccessMsg}
+              </p>
+            )}
+
+            {/* Credential security hint */}
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 border-t border-line/60 pt-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Keys stored server-side only in <code>.env</code>. Never exposed to browser.</span>
+            </div>
+          </div>
+
+          {/* MAIN ACTION: ANALYZE FRAME */}
           <div className="space-y-2">
             <button
               type="button"
@@ -271,15 +465,23 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
               {state.analyzing ? (
                 <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               ) : (
-                <ScanSearch className="w-4 h-4" aria-hidden="true" />
+                <Sparkles className="w-4 h-4" aria-hidden="true" />
               )}
-              <span>{state.analyzing ? 'Analyzing Frame with Groq...' : 'Analyze Current Frame'}</span>
+              <span>
+                {state.analyzing
+                  ? `Analyzing with ${PROVIDER_METADATA[activeProvider].name}...`
+                  : `Analyze Frame (${PROVIDER_METADATA[activeProvider].name})`}
+              </span>
             </button>
 
-            {/* Quick status reminders */}
             {!settings.enabled && (
               <p className="text-xs text-amber-300/90 text-center">
-                External AI processing is off. Enable it in Advanced Settings below.
+                AI processing is off. Enable it in Settings below to analyze frames.
+              </p>
+            )}
+            {settings.enabled && !isCurrentProviderConfigured && (
+              <p className="text-xs text-amber-300 text-center">
+                {PROVIDER_METADATA[activeProvider].name} API key not set in server <code>.env</code>.
               </p>
             )}
             {settings.enabled && waiting && (
@@ -287,22 +489,9 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
                 Rate limit active: {waitText(blockedMs)} remaining.
               </p>
             )}
-            {settings.enabled && viewMode !== 'stream' && (
-              <p className="text-xs text-amber-300 text-center">
-                Switch to Live Stream mode to analyze camera frames.
-              </p>
-            )}
             {skippedNote && !settings.enabled && (
               <Notice tone="info" role="status">
                 <p className="text-xs">{skippedNote}</p>
-              </Notice>
-            )}
-            {backendProblem && settings.enabled && (
-              <Notice tone="bad">
-                <p className="text-xs">{backendProblem}</p>
-                <button type="button" onClick={() => void ai.refreshBackend()} className={`${BTN_SECONDARY} !h-7 !text-xs mt-1`}>
-                  Check again
-                </button>
               </Notice>
             )}
             {state.notice && (
@@ -317,23 +506,20 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
             )}
           </div>
 
-          {/* Active Model Indicator */}
-          <div className="px-3 py-2 rounded-lg bg-sunken border border-line text-xs font-mono text-slate-300 flex items-center justify-between">
-            <span className="text-slate-400">Model:</span>
-            <span className="text-cyan-300 font-semibold truncate max-w-[200px]" title={status?.model}>
-              {status ? status.model : 'Groq Vision (ready)'}
-            </span>
-          </div>
-
-          {/* Latest Recognition Result Card */}
+          {/* LATEST RECOGNITION RESULT CARD */}
           <div
             className="rounded-xl border border-line bg-sunken p-4 space-y-3 min-w-0"
             aria-label="Current recognition result"
             aria-busy={state.analyzing}
           >
             <div className="flex items-center justify-between border-b border-line pb-2">
-              <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                Latest Recognition Result
+              <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <span>Recognition Result</span>
+                {current?.provider && (
+                  <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/30">
+                    {PROVIDER_METADATA[current.provider]?.name || current.provider}
+                  </span>
+                )}
               </h3>
               {current && (
                 <span className="text-xs font-mono text-slate-400">
@@ -346,13 +532,13 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
               <div role="status" className="py-6 flex flex-col items-center justify-center space-y-2 text-center">
                 <Loader2 className="w-6 h-6 animate-spin text-cyan-400" aria-hidden="true" />
                 <p className="text-xs text-slate-300">
-                  Asking Groq Vision to analyze this frame...
+                  Requesting vision analysis from {PROVIDER_METADATA[activeProvider].name}...
                 </p>
               </div>
             ) : !current ? (
               <div className="py-6 text-center text-xs text-slate-400 space-y-1">
                 <p className="font-medium text-slate-300">No frame analyzed yet</p>
-                <p>Click "Analyze Current Frame" above to inspect the live feed.</p>
+                <p>Click "Analyze Frame" above to run scene identification.</p>
               </div>
             ) : current.status === 'failed' ? (
               <Notice tone="bad" role="alert">
@@ -376,27 +562,43 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
                       </p>
                     )}
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-mono text-slate-400">
-                      <span>{current.trigger === 'motion' ? 'Trigger: Motion' : 'Trigger: Manual'}</span>
+                      <span>Model: {current.model || 'Unknown'}</span>
                       {current.latencyMs != null && <span>{(current.latencyMs / 1000).toFixed(1)}s latency</span>}
                       {current.usage && <span>{current.usage.promptTokens + current.usage.completionTokens} tokens</span>}
                     </div>
                   </div>
                 </div>
 
-                {/* Detected Object Badges */}
+                {/* Detected Objects with Categories and Certainty */}
                 <div className="space-y-1.5 pt-1">
-                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Detected Object Labels ({current.objects.length})
+                  <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Detected Objects ({current.objects.length})</span>
+                    <span className="text-[10px] text-slate-500 font-normal">
+                      Confidence: {current.objects.every((o) => !o.uncertain) ? 'High (Confirmed)' : 'Flagged by model'}
+                    </span>
                   </div>
                   {current.objects.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No specific objects recognized</p>
+                    <p className="text-xs text-slate-400 italic">No specific objects identified in frame</p>
                   ) : (
                     <ul className="flex flex-wrap gap-1.5">
                       {current.objects.map((o, i) => (
                         <li key={`${o.label}-${i}`} className={`${CHIP} border-cyan-500/40 bg-cyan-500/10 text-cyan-200`}>
                           <span className="font-semibold">{o.label}</span>
                           <span className="text-slate-400 ml-1">({singular(o.category)})</span>
-                          {o.uncertain && <span className="ml-1 text-amber-300 text-[10px]">?</span>}
+                          {o.uncertain ? (
+                            <span className="ml-1 text-amber-300 text-[10px]" title="Model flagged as uncertain">
+                              [?]
+                            </span>
+                          ) : (
+                            <span className="ml-1 text-emerald-400 text-[10px]" title="Confirmed detection">
+                              ✓
+                            </span>
+                          )}
+                          {typeof o.confidence === 'number' && (
+                            <span className="ml-1 text-[10px] text-cyan-300 font-mono">
+                              ({Math.round(o.confidence * 100)}%)
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -413,12 +615,10 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
         </div>
       </div>
 
-      {/* ====================================================================
-          C. Compact Collapsible AI Settings & Privacy Disclosures
-         ==================================================================== */}
-      <Disclosure summary="Advanced AI Settings" defaultOpen={false}>
+      {/* ADVANCED AI SETTINGS & AUTOMATION (COLLAPSIBLE) */}
+      <Disclosure summary="Automation & Filter Settings" defaultOpen={false}>
         <div className="space-y-4 pt-2">
-          {/* External AI Consent Switch & Privacy Disclosure */}
+          {/* Master Enablement Switch */}
           <div className="p-3.5 rounded-lg border border-edge bg-raised/40 space-y-2.5">
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input
@@ -432,23 +632,16 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
               />
               <div className="space-y-0.5">
                 <span className="text-[13px] font-medium text-white">
-                  Enable external AI processing (Groq Vision)
+                  Enable External AI Vision Processing
                 </span>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Off by default. When enabled, single JPEG frames are sent through this app's backend to Groq for visual recognition.
-                  Switching this off immediately prevents any frames from leaving your network.
+                  Off by default. When enabled, captured JPEG frames are sent through your local backend to the active AI provider.
+                  Switching this off ensures no camera data is transmitted upstream.
                 </p>
               </div>
             </label>
-
-            <Notice tone="warn">
-              <p className="text-xs leading-relaxed text-amber-200/90">
-                <strong>Privacy Disclosure:</strong> One frame at a time is sent to Groq only when you click Analyze or when motion is verified (if configured). Groq does not retain inference data by default, though diagnostic logs may be kept temporarily. Zero Data Retention can be configured in your Groq account.
-              </p>
-            </Notice>
           </div>
 
-          {/* AI Settings Fields: Automatic on motion, Categories */}
           <AiSettingsFields settings={settings} onChange={ai.configure} idPrefix="ai-panel" />
 
           {settings.autoOnMotion && state.autoCooldownUntil !== null && state.autoCooldownUntil > now && (
@@ -457,97 +650,21 @@ export const AiRecognitionPanel: React.FC<AiRecognitionPanelProps> = ({
             </p>
           )}
 
-          {/* Usage & Quota Info */}
-          <div className="p-3 rounded-lg bg-sunken border border-line text-xs font-mono text-slate-300 space-y-1">
-            <div className="font-semibold text-slate-200">API Usage & Rate Limits</div>
-            <p className="text-slate-400">
-              Analyses this session: {state.requestsThisSession}
-              {status && ` • Server limits: ${status.limits.perMinute}/min, ${status.limits.remainingToday}/${status.limits.perDay} remaining today`}
-            </p>
-            <p className="text-slate-400 text-[11px]">
-              Model: {status?.model || 'llama-3.2-11b-vision-preview'} • ~2,500 tokens per analysis
-            </p>
-          </div>
-
-          {/* Recent Recognitions List with Clear History */}
-          <div className="space-y-2 pt-2 border-t border-line">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Recent Recognitions
-              </h4>
-              <div className="flex flex-wrap items-center gap-2">
-                {ai.confirmingClear ? (
-                  <>
-                    <button type="button" onClick={ai.requestClearHistory} className={BTN_DANGER_SOLID}>
-                      Confirm Clear
-                    </button>
-                    <button type="button" onClick={ai.cancelClearHistory} className={BTN_SECONDARY}>
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={ai.requestClearHistory}
-                    disabled={history.events.length === 0}
-                    className={BTN_GHOST}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Clear history</span>
-                  </button>
-                )}
-                {onViewAll && (
-                  <button type="button" onClick={onViewAll} className={BTN_SECONDARY}>
-                    View All{history.events.length > RECENT_COUNT ? ` (${history.events.length})` : ''}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <ul aria-label="Recent recognitions" className="rounded-lg bg-sunken border border-line divide-y divide-line text-xs">
-              {recent.length === 0 ? (
-                <li className="p-3 text-slate-400">No recognition history recorded yet.</li>
-              ) : (
-                recent.map((event) => {
-                  const snap = describeSnapshotLink(event.snapshot, galleryIds);
-                  const thumb = event.snapshot.snapshotId ? galleryById.get(event.snapshot.snapshotId) : undefined;
-                  const kinds = Array.from(new Set(event.objects.map((o) => o.category)));
-                  return (
-                    <li key={event.id} className="flex gap-3 p-3 items-center">
-                      {thumb && (
-                        <SnapshotImage
-                          item={thumb}
-                          alt="Analyzed frame thumbnail"
-                          className="w-16 aspect-video shrink-0 rounded object-cover bg-black"
-                        />
-                      )}
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white">
-                            {event.summary || categoryName(event.category)}
-                          </span>
-                          <span className="text-[11px] font-mono text-slate-400">
-                            {formatEventTime(event.t, now)} ({event.trigger === 'motion' ? 'motion' : 'manual'})
-                          </span>
-                        </div>
-                        {event.status === 'failed' ? (
-                          <p className="text-rose-300">{event.error?.message}</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1 pt-0.5">
-                            {kinds.map((k) => (
-                              <span key={k} className={`${CHIP} border-edge text-slate-300 text-[10px]`}>
-                                {singular(k)}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {snap && <div className={`text-[11px] ${snap.tone}`}>{snap.text}</div>}
-                      </div>
-                    </li>
-                  );
-                })
+          {/* Usage & History Footer */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-3 text-xs text-slate-400">
+            <span>
+              Session analyses: <strong className="text-slate-200">{state.requestsThisSession}</strong>
+              {backendStatus && (
+                <span className="ml-2 font-mono">
+                  (Daily limit: {backendStatus.limits.perDay}, remaining: {backendStatus.limits.remainingToday})
+                </span>
               )}
-            </ul>
+            </span>
+            {onViewAll && (
+              <button type="button" onClick={onViewAll} className={`${BTN_GHOST} !h-7 !text-xs`}>
+                View Event History →
+              </button>
+            )}
           </div>
         </div>
       </Disclosure>
