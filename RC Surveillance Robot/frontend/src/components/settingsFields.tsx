@@ -196,7 +196,7 @@ export const AiSettingsFields: React.FC<AiFieldsProps> = ({ settings, onChange, 
           className={`${CHECK} mt-0.5`}
         />
         <span className="text-[13px] text-slate-100">
-          Enable external AI processing (Groq)
+          Enable External AI Processing
           <span className="block text-xs text-slate-400 font-normal mt-0.5">
             Off by default. While it is off, no image is ever sent anywhere.
           </span>

@@ -8,26 +8,39 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../server/app';
-import { ServerConfig } from '../server/config';
+import { ServerConfig, loadConfig } from '../server/config';
 
 export const FAKE_KEY = 'gsk_THIS_IS_A_FAKE_TEST_KEY_0123456789';
 
-export function testConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
-  return {
-    apiKey: FAKE_KEY,
-    model: 'qwen/qwen3.8-27b',
-    groqBaseUrl: 'https://api.groq.test/openai/v1',
-    port: 0,
-    host: '127.0.0.1',
-    maxImageBytes: 200_000,
-    ratePerMinute: 60,
-    maxPerDay: 1000,
-    maxConcurrent: 2,
-    requestTimeoutMs: 1500,
-    maxRetries: 1,
-    allowedOrigins: [],
-    ...overrides,
+/**
+ * Build a ServerConfig for tests. Accepts the same flat overrides that the old tests used
+ * (apiKey, model, groqBaseUrl) as well as new-style overrides. The base config uses
+ * FAKE_KEY for Groq, with sane test defaults for all limits.
+ */
+export function testConfig(overrides: Partial<ServerConfig> & {
+  apiKey?: string | undefined;
+  model?: string;
+  groqBaseUrl?: string;
+} = {}): ServerConfig {
+  const { apiKey, model, groqBaseUrl, ...rest } = overrides;
+
+  const env: Record<string, string | undefined> = {
+    GROQ_API_KEY: Object.prototype.hasOwnProperty.call(overrides, 'apiKey') ? apiKey : FAKE_KEY,
+    GROQ_MODEL: model ?? 'qwen/qwen3.8-27b',
+    GROQ_API_BASE_URL: groqBaseUrl ?? 'https://api.groq.test/openai/v1',
+    AI_MAX_IMAGE_BYTES: String(rest.maxImageBytes ?? 200_000),
+    AI_RATE_PER_MINUTE: String(rest.ratePerMinute ?? 60),
+    AI_MAX_PER_DAY: String(rest.maxPerDay ?? 1000),
+    AI_MAX_CONCURRENT: String(rest.maxConcurrent ?? 2),
+    AI_REQUEST_TIMEOUT_MS: String(rest.requestTimeoutMs ?? 1500),
+    AI_MAX_RETRIES: String(rest.maxRetries ?? 1),
+    AI_ALLOWED_ORIGINS: (rest.allowedOrigins ?? []).join(','),
   };
+
+  const cfg = loadConfig(env);
+
+  // Apply any remaining structured overrides that loadConfig doesn't handle via env
+  return Object.assign(cfg, rest);
 }
 
 /** A structurally valid JPEG (SOI, JFIF header, start-of-frame with the size, scan, EOI), `size` bytes. */

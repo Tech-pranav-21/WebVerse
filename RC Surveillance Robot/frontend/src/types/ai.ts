@@ -7,6 +7,7 @@ import type {
   AiBackendStatus,
   AiCategory,
   AiErrorCode,
+  AiProviderId,
   FilterableCategory,
   RecognizedObject,
   TokenUsage,
@@ -24,9 +25,13 @@ export interface AiSettings {
    * leaves this browser.
    */
   enabled: boolean;
+  /** Selected AI provider (groq | gemini | openai). */
+  provider: AiProviderId;
+  /** Model to use for the selected provider. */
+  model: string;
   /** Analyze a frame automatically when Motion Detection raises an alert. Needs `autoAcknowledged`. */
   autoOnMotion: boolean;
-  /** The user ticked the disclosure that images are sent to Groq. Required before automatic mode can be on. */
+  /** The user ticked the disclosure that images are sent to an AI provider. Required before automatic mode can be on. */
   autoAcknowledged: boolean;
   /** Which recognized categories count as an event worth keeping. */
   categories: Record<FilterableCategory, boolean>;
@@ -45,6 +50,8 @@ export interface AiEvent {
   t: number;
   trigger: AiTrigger;
   status: AiEventStatus;
+  /** Provider used for this recognition. */
+  provider?: AiProviderId;
   model?: string;
   summary?: string;
   /** Success only. */
@@ -67,7 +74,7 @@ export type AiBackendState =
   | { kind: 'unknown' }
   | { kind: 'checking' }
   | { kind: 'ready'; status: AiBackendStatus }
-  /** The backend answers but has no Groq key configured. */
+  /** The backend answers but has no key configured for the active provider. */
   | { kind: 'not-configured'; status?: AiBackendStatus }
   | { kind: 'unreachable'; message: string }
   | { kind: 'error'; message: string };

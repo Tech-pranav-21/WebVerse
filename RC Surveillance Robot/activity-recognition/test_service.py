@@ -15,6 +15,10 @@ from typing import Dict, Any
 from PIL import Image, ImageDraw
 import numpy as np
 
+# This is a standalone end-to-end verification script. Its steps share values through
+# run_all_tests(), so pytest must not collect them as independent fixture-based tests.
+__test__ = False
+
 from config import KEYPOINT_NAMES, SKELETON_PAIRS
 from model_loader import get_model_manager
 from pose_estimator import (

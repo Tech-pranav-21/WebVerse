@@ -1,7 +1,56 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'url';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
+
+function docsImagesPlugin(): Plugin {
+  const docsImagesDir = fileURLToPath(new URL('../docs/images', import.meta.url));
+
+  return {
+    name: 'vite-plugin-docs-images',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const decodedUrl = decodeURIComponent(req.url || '');
+        if (decodedUrl.startsWith('/docs/images/')) {
+          const fileName = decodedUrl.replace(/^\/docs\/images\//, '').split('?')[0];
+          const filePath = path.join(docsImagesDir, fileName);
+          if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            const ext = path.extname(filePath).toLowerCase();
+            const mimeMap: Record<string, string> = {
+              '.jpeg': 'image/jpeg',
+              '.jpg': 'image/jpeg',
+              '.png': 'image/png',
+              '.webp': 'image/webp',
+              '.svg': 'image/svg+xml',
+            };
+            res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            fs.createReadStream(filePath).pipe(res);
+            return;
+          }
+        }
+        next();
+      });
+    },
+    generateBundle() {
+      if (fs.existsSync(docsImagesDir)) {
+        const files = fs.readdirSync(docsImagesDir);
+        for (const file of files) {
+          const filePath = path.join(docsImagesDir, file);
+          if (fs.statSync(filePath).isFile()) {
+            this.emitFile({
+              type: 'asset',
+              fileName: `docs/images/${file}`,
+              source: fs.readFileSync(filePath),
+            });
+          }
+        }
+      }
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   // The AI backend (server/, `npm run server`) holds the Groq key. The browser reaches it on the same
@@ -19,7 +68,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), docsImagesPlugin()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('.', import.meta.url)),

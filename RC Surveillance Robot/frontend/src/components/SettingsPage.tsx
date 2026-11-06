@@ -97,9 +97,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ config, onSave, onRe
         {tab === 'ai' && (
           <Panel
             id="settings-ai"
-            title="AI Recognition"
+            title="AI Provider Settings"
             icon={ScanSearch}
-            description="Groq describes one camera frame at a time. These are the same options as on the AI Detection page."
+            description="Multi-provider AI vision (Groq, Gemini, OpenAI) analyzes camera frames. Configure provider/model in the AI Detection panel."
           >
             <Notice tone="warn">
               <p>
@@ -110,8 +110,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ config, onSave, onRe
             {ai.saveFailed && <SaveFailedNotice />}
             <AiSettingsFields settings={ai.value} onChange={ai.update} idPrefix="settings" showEnable />
             <Hint>
-              The Groq API key and the model are set on the server (the backend's <code className="font-mono">.env</code>),
-              never in this page or in the browser. The AI Detection page shows which model the backend uses.
+              Provider API keys and models are configured server-side in the backend <code className="font-mono">.env</code>.
+              They are never stored in this browser. The AI Detection page shows the active provider and model.
             </Hint>
           </Panel>
         )}

@@ -23,7 +23,7 @@ The purpose of this frontend dashboard is to provide an operator console for obs
 
 - **UI Framework:** React 19 (`react`, `react-dom`)
 - **Language:** TypeScript 5.8
-- **Build Tool & Dev Server:** Vite 6 (`vite`, `@vitejs/plugin-react`)
+- **Build Tool & Dev Server:** Vite 8 (`vite`, `@vitejs/plugin-react`)
 - **Styling:** Tailwind CSS v4 (`tailwindcss`, `@tailwindcss/vite`)
 - **Icons:** Lucide React (`lucide-react`)
 - **Architecture:** Client-side Single Page Application (SPA) with zero backend dependency.
@@ -33,7 +33,7 @@ The purpose of this frontend dashboard is to provide an operator console for obs
 ## 3. Prerequisites
 
 Before running or building the dashboard, verify the following:
-- **Node.js:** Version 18.0.0 or higher (Node 20+ or 24+ recommended).
+- **Node.js:** Version 20.19.0 or higher (Node 22+ recommended).
 - **Package Manager:** `npm` (v9+) or `pnpm` / `yarn`.
 - **Web Browser:** Modern evergreen browser (Google Chrome, Microsoft Edge, Mozilla Firefox, or Safari).
 - **Local Network:** The computer running the browser and the ESP32-CAM robot must be connected to the **same local Wi-Fi network** (or the computer must connect directly to the ESP32 SoftAP Wi-Fi).
@@ -228,11 +228,11 @@ node tools/mock-esp32-cam/mock-esp32-cam.mjs --cors
 # Failure injection (any browser tab): http://localhost:8082/__chaos?action=stall  (resume, drop, reboot&ms=8000, ...)
 ```
 
-Real-camera verification steps are in `PHASE1_STABILITY_REPORT.md`.
+Real-camera verification steps are in `../docs/hardware-guide.md`.
 
 ## 13. Diagnostics Center (Phase 2)
 
-The **Diagnostics** page opens with an overview (one line per check, *Run Full Test*, *View Detailed Logs*, *Copy Report*). *View Detailed Logs* shows, from the top: a **Diagnostics Summary**, the Phase 1 **Stream Health** card, a **Camera Response Time** card and a **Connection History** card. Full details, tests and limits: `PHASE2_DIAGNOSTICS_REPORT.md`.
+The **Diagnostics** page opens with an overview (one line per check, *Run Full Test*, *View Detailed Logs*, *Copy Report*). *View Detailed Logs* shows, from the top: a **Diagnostics Summary**, the Phase 1 **Stream Health** card, a **Camera Response Time** card and a **Connection History** card. Full details, tests and limits: `../docs/architecture.md`.
 
 **Diagnostics Summary.** Stream state, camera reachability, last confirmed frame, most recent error, reconnection attempts, whether reconnection succeeded and the last successful recovery. Every row is marked *Measured*, *Not measured yet* or *Cannot be measured*. A host that answers is never shown as "video is flowing", and a failed one-off check is never shown as "the stream failed". **Copy Report** copies a plain-text report for troubleshooting (camera address with credentials and query strings removed, state, reachability, events, attempts, last error, browser, limitations; no passwords, tokens or images). If the browser blocks the clipboard it falls back to a selected text box.
 
@@ -242,13 +242,13 @@ The **Diagnostics** page opens with an overview (one line per check, *Run Full T
 
 **What the page can and cannot see.** The stream is open only while the Dashboard or AI Detection page is on screen, so the Diagnostics page reads "Disconnected - stream not open on this page" by design. In plain video mode only the first frame of each connection is observable; stalls are detected only with *Frame monitor*, which needs the camera to send `Access-Control-Allow-Origin`. The dashboard does not compare picture content.
 
-**Tests.** `npm test` runs 291 mocked unit tests (118 from Phase 1, 173 new). They do not involve a camera. `docs/phase2-evidence/` holds the browser runs against the mock camera and the mutation checks.
+**Tests.** `npm test` runs mocked unit and integration tests; they do not involve a camera. `../docs/images/` holds the browser runs against the mock camera and the mutation checks.
 
 ---
 
 ## 14. Smart Snapshot (Phase 3A)
 
-Capture Still, Snapshot mode and the Snapshot Gallery now work **without the camera's `/capture` endpoint** (many ESP32-CAM firmwares have only `/` and `/stream`). The dashboard never requests `/capture`; the Settings field "Single Snapshot Path" is only shown in the status card and used by the older diagnostics probe. Evidence, limits and what is still unverified on real hardware: `PHASE3A_SMART_SNAPSHOT_REPORT.md`.
+Capture Still, Snapshot mode and the Snapshot Gallery now work **without the camera's `/capture` endpoint** (many ESP32-CAM firmwares have only `/` and `/stream`). The dashboard never requests `/capture`; the Settings field "Single Snapshot Path" is only shown in the status card and used by the older diagnostics probe. Evidence, limits and what is still unverified on real hardware: `../docs/architecture.md`.
 
 **Three different things.** *Captured*: a real frame was read from the video. *Saved*: it is in the gallery (and in this browser's IndexedDB). *Downloaded*: a `.jpg` file was handed to the browser. The dashboard reports each one separately; a gallery save is never described as a download. A web page cannot see whether you finished the browser's save dialog, so it only ever says the download *started*.
 
@@ -285,7 +285,7 @@ Capture Still, Snapshot mode and the Snapshot Gallery now work **without the cam
 
 ## 15. Motion Detection (Phase 3B)
 
-A **Motion Detection** card is on the AI Detection page, next to a small live picture. It compares consecutive frames of the stream that is already on screen, entirely in this browser: no extra connection to the camera, no `/capture`, nothing sent anywhere. Evidence, thresholds, limits and what is still unverified on real hardware: `PHASE3B_MOTION_DETECTION_REPORT.md`.
+A **Motion Detection** card is on the AI Detection page, next to a small live picture. It compares consecutive frames of the stream that is already on screen, entirely in this browser: no extra connection to the camera, no `/capture`, nothing sent anywhere. Evidence, thresholds, limits and what is still unverified on real hardware: `../docs/architecture.md`.
 
 **Start and stop.** The ON/OFF switch in the card header begins and ends detection. Switching it on while it runs does nothing. The switch reflects the state and cannot be turned on in Snapshot display mode (there is no live picture to read).
 
@@ -344,11 +344,11 @@ Other settings: *Cooldown between alerts* (default 15 s), and under *Advanced*: 
 
 **Tests.** At the end of Phase 3B `npm test` ran 489 mocked tests (373 before, 116 new) with generated frames, a fake clock, a scripted frame sampler and a fake canvas. They cannot show how a real camera's picture behaves. The current total is in section 16.
 
-## 16. Groq AI Recognition (Phase 3C)
+## 16. Multi-provider AI Recognition
 
-The **Groq AI Recognition** card (under Motion Detection on the AI Detection page) asks an AI model to describe what is in **one camera frame**: people, animals, vehicles and other objects. Evidence, limits, costs and what is still unverified: `PHASE3C_GROQ_RECOGNITION_REPORT.md`.
+The **AI Recognition** card (under Motion Detection on the AI Detection page) sends one camera frame to the selected provider — **Groq**, **Google Gemini**, or **OpenAI** — to describe people, animals, vehicles and other objects. Evidence, limits, costs and what is still unverified: `../docs/architecture.md`.
 
-> **Your camera image leaves this computer.** Each analysis sends one JPEG through this project's own backend to Groq, an external internet service. Nothing is sent until you switch the feature on **and** press Analyze (or also enable automatic analysis after acknowledging the disclosure). Switching the feature off stops all uploads.
+> **Your camera image leaves this computer.** Each analysis sends one JPEG through this project's own backend to the selected external AI provider. Nothing is sent until you switch the feature on **and** press Analyze (or also enable automatic analysis after acknowledging the disclosure). Switching the feature off stops all uploads.
 
 **What it is, and is not.** Groq is the inference platform, not a detector. The model is a *vision-language model*: it writes a description and a list of things it says it sees. There are **no bounding boxes, no class IDs and no confidence figures** (Groq's chat API returns none, and a number a language model writes about itself is not a measured probability), so none are shown. Each object carries a category (person, animal, vehicle, other or unknown) and a "not sure" flag that the model itself sets. It can be wrong. Its accuracy on your camera's small, low-resolution frames has **not been measured**.
 
@@ -358,7 +358,7 @@ The **Groq AI Recognition** card (under Motion Detection on the AI Detection pag
 
 **Setup.**
 1. Create a Groq API key at https://console.groq.com/keys.
-2. Copy `.env.example` to `.env` (git-ignored) and set `GROQ_API_KEY=` to your key. Never commit it and never rename it with a `VITE_` prefix.
+2. Copy `.env.example` to `.env` (git-ignored), set the selected provider's key (`GROQ_API_KEY`, `GEMINI_API_KEY`, or `OPENAI_API_KEY`), and optionally set `ACTIVE_AI_PROVIDER`. Never commit a key or rename it with a `VITE_` prefix.
 3. Run the backend and the dashboard in two terminals:
 
 ```bash
@@ -372,6 +372,9 @@ For the production build use `npm run build`, then `npm run preview` (it proxies
 | --- | --- | --- |
 | `GROQ_API_KEY` | empty | Your key. Empty = AI recognition unavailable. |
 | `GROQ_MODEL` | `qwen/qwen3.8-27b` | Vision model id. |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | empty / `gemini-2.5-flash` | Google Gemini credential and vision model. |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | empty / `gpt-4o-mini` | OpenAI credential and vision model. |
+| `ACTIVE_AI_PROVIDER` | `groq` | Default active provider: `groq`, `gemini`, or `openai`. |
 | `AI_SERVER_PORT` / `AI_SERVER_HOST` | `8787` / `127.0.0.1` | Where the backend listens. Keep it on this machine. |
 | `AI_RATE_PER_MINUTE` / `AI_MAX_PER_DAY` | `6` / `100` | Cap on requests forwarded to Groq (rolling windows, all clients together). |
 | `AI_MAX_IMAGE_BYTES` | `1500000` | Largest JPEG accepted (frames are 20 to 60 kB). |
@@ -621,8 +624,8 @@ RC Surveillance Robot/
     │   └── main.tsx
     │
     ├── docs/
-    │   ├── phase1-evidence/        (raw evidence behind PHASE1_STABILITY_REPORT.md)
-    │   └── phase2-evidence/        (raw evidence behind PHASE2_DIAGNOSTICS_REPORT.md)
+    │   ├── phase1-evidence/        (raw evidence behind ../docs/hardware-guide.md)
+    │   └── phase2-evidence/        (raw evidence behind ../docs/architecture.md)
     │
     ├── tests/                      (unit tests, run with `npm test`)
     │   └── fixtures/               (REAL recorded responses of the Python pose service)
@@ -640,11 +643,11 @@ RC Surveillance Robot/
     ├── tsconfig.json
     ├── tsconfig.test.json
     ├── vite.config.ts
-    ├── PHASE1_STABILITY_REPORT.md
-    ├── PHASE2_DIAGNOSTICS_REPORT.md
-    ├── PHASE3A_SMART_SNAPSHOT_REPORT.md
-    ├── PHASE3B_MOTION_DETECTION_REPORT.md
-    ├── PHASE3C_GROQ_RECOGNITION_REPORT.md
+    ├── ../docs/hardware-guide.md
+    ├── ../docs/architecture.md
+    ├── ../docs/architecture.md
+    ├── ../docs/architecture.md
+    ├── ../docs/architecture.md
     ├── tsconfig.server.json
     └── README.md
 ```

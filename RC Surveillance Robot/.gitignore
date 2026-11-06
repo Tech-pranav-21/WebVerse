@@ -8,3 +8,12 @@ venv/
 .env
 .env.*
 !.env.example
+
+# JavaScript build output and dependency installs
+frontend/node_modules/
+frontend/dist/
+frontend/server/dist/
+
+# Local logs and test artifacts
+*.log
+.pytest_cache/

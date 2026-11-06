@@ -321,7 +321,8 @@ describe('a browser that goes away mid-request', () => {
       const req = http.request({ host: '127.0.0.1', port: s.port, method: 'POST', path: '/api/ai/recognize', headers: { 'Content-Type': 'application/json' } });
       req.on('error', () => {});
       req.end(JSON.stringify(goodBody()));
-      while (s.groq.calls.length < 1) await new Promise((r) => setTimeout(r, 5));
+      let _w = 0;
+      while (s.groq.calls.length < 1 && _w++ < 200) await new Promise((r) => setTimeout(r, 5));
       assert.equal(s.app.gate.inFlight, 1);
       req.destroy(); // the browser navigates away
       for (let i = 0; i < 200 && s.app.gate.inFlight > 0; i++) await new Promise((r) => setTimeout(r, 10));
@@ -369,7 +370,8 @@ describe('usage limits', () => {
     const gate = new Promise<void>((resolve) => (release = resolve));
     await withApp(async (s) => {
       const first = jsonPost(s.port, goodBody());
-      while (s.groq.calls.length < 1) await new Promise((r) => setTimeout(r, 5));
+      let _w = 0;
+      while (s.groq.calls.length < 1 && _w++ < 200) await new Promise((r) => setTimeout(r, 5));
       const second = await jsonPost(s.port, goodBody());
       assert.equal(second.status, 503);
       assert.equal(second.json.error.code, 'busy');

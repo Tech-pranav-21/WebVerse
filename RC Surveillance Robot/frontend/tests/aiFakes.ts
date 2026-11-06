@@ -23,6 +23,7 @@ export function okResponse(objects: RecognizedObject[] = [personObject, carObjec
   return {
     ok: true,
     requestId: 'req-1',
+    provider: 'groq',
     model: 'qwen/qwen3.8-27b',
     result: { summary, objects },
     usage: { promptTokens: 2400, completionTokens: 120 },
@@ -31,17 +32,22 @@ export function okResponse(objects: RecognizedObject[] = [personObject, carObjec
 }
 
 export function readyStatus(overrides: Partial<AiBackendStatus> = {}): AiBackendStatus {
+  const groqProvider = { id: 'groq' as const, name: 'Groq', configured: true, model: 'qwen/qwen3.8-27b', availableModels: ['qwen/qwen3.8-27b'] };
+  const geminiProvider = { id: 'gemini' as const, name: 'Google Gemini', configured: false, model: 'gemini-2.5-flash', availableModels: ['gemini-2.5-flash'] };
+  const openaiProvider = { id: 'openai' as const, name: 'OpenAI', configured: false, model: 'gpt-4o-mini', availableModels: ['gpt-4o-mini'] };
   return {
     ok: true,
     provider: 'groq',
+    activeProvider: 'groq',
     configured: true,
     model: 'qwen/qwen3.8-27b',
     preview: true,
+    providers: { groq: groqProvider, gemini: geminiProvider, openai: openaiProvider },
     maxImageBytes: 1_500_000,
     mimeTypes: ['image/jpeg'],
     limits: { perMinute: 6, perDay: 100, remainingToday: 100 },
     ...overrides,
-  };
+  } as AiBackendStatus;
 }
 
 export function deferred<T>() {
@@ -71,7 +77,9 @@ export class FakeAiClient {
     return this.statusImpl();
   }
 
-  recognize(blob: Blob, signal?: AbortSignal): Promise<RecognizeSuccess> {
+  recognize(blob: Blob, optionsOrSignal?: { provider?: any; model?: any } | AbortSignal, maybeSignal?: AbortSignal): Promise<RecognizeSuccess> {
+    const signal: AbortSignal | undefined =
+      optionsOrSignal && 'aborted' in optionsOrSignal ? (optionsOrSignal as AbortSignal) : maybeSignal;
     const call = { blob, signal };
     this.recognizeCalls.push(call);
     return this.recognizeImpl(call);

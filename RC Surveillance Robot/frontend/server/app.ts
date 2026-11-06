@@ -6,17 +6,24 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_MODEL, ServerConfig } from './config.js';
-import { ProviderError, callGroq } from './groqClient.js';
+import { ProviderError } from './groqClient.js';
 import { validateJpegBase64 } from './image.js';
 import { Clock, ConcurrencyGate, RollingLimiter, systemClock } from './limits.js';
 import { MalformedOutputError, normalizeModelOutput } from './normalize.js';
+import { providerRegistry } from './providers/registry.js';
+import type { AiProviderId } from './providers/types.js';
 import {
   AiBackendStatus,
   AiErrorCode,
   ApiError,
+  CONFIG_PATH,
+  ProviderInfo,
   RECOGNIZE_PATH,
   RecognizeSuccess,
   STATUS_PATH,
+  TEST_CONNECTION_PATH,
+  TestConnectionResponse,
+  UpdateAiConfigResponse,
 } from './protocol.js';
 import { redactSecrets } from './redact.js';
 
@@ -85,6 +92,14 @@ export function createApp(deps: AppDeps) {
   /** Base64 inflates by 4/3; a little room for the JSON around it. */
   const maxBodyBytes = Math.ceil((config.maxImageBytes * 4) / 3) + 2048;
 
+  function allApiKeys(): string[] {
+    const keys: string[] = [];
+    if (config.providers.groq?.apiKey) keys.push(config.providers.groq.apiKey);
+    if (config.providers.gemini?.apiKey) keys.push(config.providers.gemini.apiKey);
+    if (config.providers.openai?.apiKey) keys.push(config.providers.openai.apiKey);
+    return keys;
+  }
+
   function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
     if (res.headersSent) return;
     const json = JSON.stringify(body);
@@ -136,12 +151,41 @@ export function createApp(deps: AppDeps) {
   }
 
   function status(res: ServerResponse): number {
+    const providersMap: Record<AiProviderId, ProviderInfo> = {
+      groq: {
+        id: 'groq',
+        name: 'Groq',
+        configured: Boolean(config.providers.groq?.apiKey),
+        model: config.providers.groq?.model || DEFAULT_MODEL,
+        availableModels: providerRegistry.get('groq')?.availableModels || ['qwen/qwen3.8-27b'],
+      },
+      gemini: {
+        id: 'gemini',
+        name: 'Google Gemini',
+        configured: Boolean(config.providers.gemini?.apiKey),
+        model: config.providers.gemini?.model || 'gemini-2.5-flash',
+        availableModels: providerRegistry.get('gemini')?.availableModels || ['gemini-2.5-flash', 'gemini-1.5-flash'],
+      },
+      openai: {
+        id: 'openai',
+        name: 'OpenAI',
+        configured: Boolean(config.providers.openai?.apiKey),
+        model: config.providers.openai?.model || 'gpt-4o-mini',
+        availableModels: providerRegistry.get('openai')?.availableModels || ['gpt-4o-mini', 'gpt-4o'],
+      },
+    };
+
+    const active = config.activeProvider || 'groq';
+    const activeProviderConfig = config.providers[active];
+
     const body: AiBackendStatus = {
       ok: true,
-      provider: 'groq',
-      configured: Boolean(config.apiKey),
-      model: config.model,
-      preview: config.model === DEFAULT_MODEL,
+      provider: active,
+      activeProvider: active,
+      configured: Boolean(activeProviderConfig?.apiKey),
+      model: activeProviderConfig?.model || DEFAULT_MODEL,
+      preview: active === 'groq' && activeProviderConfig?.model === DEFAULT_MODEL,
+      providers: providersMap,
       maxImageBytes: config.maxImageBytes,
       mimeTypes: ['image/jpeg'],
       limits: { perMinute: config.ratePerMinute, perDay: config.maxPerDay, remainingToday: limiter.remainingToday() },
@@ -150,10 +194,87 @@ export function createApp(deps: AppDeps) {
     return 200;
   }
 
-  async function recognize(req: IncomingMessage, res: ServerResponse): Promise<number> {
-    if (!config.apiKey) {
-      return fail(res, 'not_configured', 'AI recognition is not configured: GROQ_API_KEY is not set on the server.');
+  async function testConnection(req: IncomingMessage, res: ServerResponse): Promise<number> {
+    const contentType = String(req.headers['content-type'] ?? '');
+    if (!/^application\/json\b/i.test(contentType)) {
+      return fail(res, 'unsupported_media_type', 'Send the request as application/json.');
     }
+
+    const body = await readBody(req);
+    if (!body.ok) return fail(res, 'payload_too_large', 'The request is too large.');
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(body.text);
+    } catch {
+      return fail(res, 'bad_request', 'The request body is not valid JSON.');
+    }
+
+    const requestedProvider: AiProviderId =
+      parsed?.provider && providerRegistry.has(parsed.provider) ? parsed.provider : config.activeProvider;
+
+    const adapter = providerRegistry.get(requestedProvider);
+    if (!adapter) {
+      return fail(res, 'bad_request', `Unsupported provider "${requestedProvider}".`);
+    }
+
+    const providerConf = config.providers[requestedProvider];
+    const model = parsed?.model?.trim() || providerConf?.model || adapter.defaultModel;
+    const apiKey = providerConf?.apiKey;
+
+    const result = await adapter.testConnection(apiKey, model, providerConf?.baseUrl, {
+      fetchImpl: deps.fetchImpl,
+      sleep: deps.sleep,
+    });
+
+    const response: TestConnectionResponse = {
+      ok: result.ok,
+      provider: requestedProvider,
+      model: result.model,
+      status: result.status,
+      message: result.message,
+      latencyMs: result.latencyMs,
+    };
+
+    send(res, 200, response);
+    return 200;
+  }
+
+  async function updateConfigHandler(req: IncomingMessage, res: ServerResponse): Promise<number> {
+    const contentType = String(req.headers['content-type'] ?? '');
+    if (!/^application\/json\b/i.test(contentType)) {
+      return fail(res, 'unsupported_media_type', 'Send the request as application/json.');
+    }
+
+    const body = await readBody(req);
+    if (!body.ok) return fail(res, 'payload_too_large', 'The request is too large.');
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(body.text);
+    } catch {
+      return fail(res, 'bad_request', 'The request body is not valid JSON.');
+    }
+
+    if (parsed.activeProvider && providerRegistry.has(parsed.activeProvider)) {
+      config.activeProvider = parsed.activeProvider;
+    }
+    if (parsed.model && typeof parsed.model === 'string' && parsed.model.trim()) {
+      config.providers[config.activeProvider].model = parsed.model.trim();
+    }
+
+    const response: UpdateAiConfigResponse = {
+      ok: true,
+      activeProvider: config.activeProvider,
+      model: config.model,
+      message: `Active provider updated to ${config.activeProvider} (${config.model}).`,
+    };
+
+    send(res, 200, response);
+    return 200;
+  }
+
+  async function recognize(req: IncomingMessage, res: ServerResponse): Promise<number> {
     const contentType = String(req.headers['content-type'] ?? '');
     if (!/^application\/json\b/i.test(contentType)) {
       return fail(res, 'unsupported_media_type', 'Send the request as application/json.');
@@ -175,7 +296,7 @@ export function createApp(deps: AppDeps) {
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return fail(res, 'bad_request', 'The request body must be a JSON object.');
     }
-    const { imageBase64, mimeType } = parsed as Record<string, unknown>;
+    const { imageBase64, mimeType, provider: reqProvider, model: reqModel } = parsed as Record<string, unknown>;
     if (typeof imageBase64 !== 'string' || typeof mimeType !== 'string') {
       return fail(res, 'invalid_image', 'The request needs "imageBase64" and "mimeType" as text.');
     }
@@ -186,6 +307,31 @@ export function createApp(deps: AppDeps) {
         check.problem === 'too_large' ? 'payload_too_large' : check.problem === 'wrong_type' ? 'unsupported_media_type' : 'invalid_image';
       return fail(res, code, check.message);
     }
+
+    const targetProvider: AiProviderId =
+      typeof reqProvider === 'string' && providerRegistry.has(reqProvider)
+        ? (reqProvider as AiProviderId)
+        : config.activeProvider;
+
+    const providerConfig = config.providers[targetProvider];
+    const apiKey = providerConfig?.apiKey;
+
+    if (!apiKey) {
+      const envVarName = `${targetProvider.toUpperCase()}_API_KEY`;
+      return fail(
+        res,
+        'not_configured',
+        `AI recognition is not configured: ${envVarName} is not set on the server.`,
+      );
+    }
+
+    const adapter = providerRegistry.get(targetProvider);
+    if (!adapter) {
+      return fail(res, 'bad_request', `Unsupported AI provider "${targetProvider}".`);
+    }
+
+    const targetModel =
+      typeof reqModel === 'string' && reqModel.trim() !== '' ? reqModel.trim() : providerConfig.model || adapter.defaultModel;
 
     const allowed = limiter.tryAcquire();
     if (!allowed.ok) {
@@ -198,16 +344,28 @@ export function createApp(deps: AppDeps) {
 
     const aborter = new AbortController();
     const onClose = () => {
-      if (!res.writableEnded) aborter.abort(); // the browser gave up: stop waiting for Groq
+      if (!res.writableEnded) aborter.abort();
     };
     res.on('close', onClose);
     const started = clock.now();
     try {
-      const reply = await callGroq({ config, fetchImpl: deps.fetchImpl, sleep: deps.sleep, signal: aborter.signal }, check.base64);
+      const reply = await adapter.callVision(
+        {
+          provider: targetProvider,
+          apiKey,
+          model: targetModel,
+          baseUrl: providerConfig.baseUrl,
+          imageBase64: check.base64,
+          timeoutMs: config.requestTimeoutMs,
+        },
+        { fetchImpl: deps.fetchImpl, sleep: deps.sleep, signal: aborter.signal },
+      );
+
       const result = normalizeModelOutput(reply.content);
       const success: RecognizeSuccess = {
         ok: true,
         requestId: randomUUID(),
+        provider: targetProvider,
         model: reply.model,
         result,
         ...(reply.usage ? { usage: reply.usage } : {}),
@@ -220,7 +378,7 @@ export function createApp(deps: AppDeps) {
       if (err instanceof MalformedOutputError) {
         return fail(res, 'malformed_output', `The model's answer could not be understood (${err.message}). Try again.`);
       }
-      log(`unexpected error: ${redactSecrets(err instanceof Error ? err.name : 'unknown', config.apiKey)}`);
+      log(`unexpected error: ${redactSecrets(err instanceof Error ? err.name : 'unknown', allApiKeys())}`);
       return fail(res, 'internal_error', 'Something went wrong on the server.');
     } finally {
       res.off('close', onClose);
@@ -235,17 +393,21 @@ export function createApp(deps: AppDeps) {
     try {
       path = new URL(req.url ?? '/', 'http://localhost').pathname;
       const origin = req.headers.origin;
-      if (path !== RECOGNIZE_PATH && path !== STATUS_PATH) {
+      if (path !== RECOGNIZE_PATH && path !== STATUS_PATH && path !== TEST_CONNECTION_PATH && path !== CONFIG_PATH) {
         statusCode = fail(res, 'not_found', 'Not found.');
       } else if (typeof origin === 'string' && !isOriginAllowed(origin, config)) {
         statusCode = fail(res, 'origin_not_allowed', 'This origin is not allowed to use the AI backend.');
       } else if (path === STATUS_PATH) {
         statusCode = req.method === 'GET' ? status(res) : fail(res, 'method_not_allowed', 'Use GET.');
+      } else if (path === TEST_CONNECTION_PATH) {
+        statusCode = req.method === 'POST' ? await testConnection(req, res) : fail(res, 'method_not_allowed', 'Use POST.');
+      } else if (path === CONFIG_PATH) {
+        statusCode = req.method === 'POST' ? await updateConfigHandler(req, res) : fail(res, 'method_not_allowed', 'Use POST.');
       } else {
         statusCode = req.method === 'POST' ? await recognize(req, res) : fail(res, 'method_not_allowed', 'Use POST.');
       }
     } catch (err) {
-      log(`handler error: ${redactSecrets(err instanceof Error ? err.name : 'unknown', config.apiKey)}`);
+      log(`handler error: ${redactSecrets(err instanceof Error ? err.name : 'unknown', allApiKeys())}`);
       statusCode = fail(res, 'internal_error', 'Something went wrong on the server.');
     } finally {
       log(`${req.method ?? '?'} ${path} -> ${statusCode} ${Math.max(0, clock.now() - started)}ms`);
